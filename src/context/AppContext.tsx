@@ -167,16 +167,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data.users && data.users.length > 0) {
           setUsers(data.users);
         }
-        if (data.assets) {
+        if (data.assets && data.assets.length > 0) {
           setAssets(data.assets);
         }
-        if (data.licenses) {
+        if (data.licenses && data.licenses.length > 0) {
           setLicenses(data.licenses);
         }
-        if (data.consumables) {
+        if (data.consumables && data.consumables.length > 0) {
           setConsumables(data.consumables);
         }
-        if (data.activities) {
+        if (data.activities && data.activities.length > 0) {
           setActivities(data.activities);
         }
         

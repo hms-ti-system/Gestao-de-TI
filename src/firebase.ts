@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, 
+  initializeFirestore,
   collection, 
   doc, 
   setDoc, 
@@ -13,15 +13,28 @@ import config from "../firebase-applet-config.json";
 
 const app = initializeApp(config);
 
-// Use custom database ID if provided in config
-export const db = config.firestoreDatabaseId 
-  ? getFirestore(app, config.firestoreDatabaseId) 
-  : getFirestore(app);
+// Initialize Firestore with autoDetectLongPolling and ignoreUndefinedProperties for robust connection across networks/sandboxes
+export const db = initializeFirestore(
+  app,
+  {
+    experimentalAutoDetectLongPolling: true,
+    ignoreUndefinedProperties: true
+  },
+  config.firestoreDatabaseId || undefined
+);
 
-// Helper to fetch all documents from a collection
-export async function getCollectionData<T>(collectionName: string): Promise<T[]> {
+// Helper to fetch all documents from a collection with safe timeout
+export async function getCollectionData<T>(collectionName: string, timeoutMs: number = 5000): Promise<T[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, collectionName));
+    const fetchPromise = getDocs(collection(db, collectionName));
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+    
+    const querySnapshot = await Promise.race([fetchPromise, timeoutPromise]);
+    if (!querySnapshot) {
+      console.warn(`Firestore query for "${collectionName}" timed out (${timeoutMs}ms). Using local cached state.`);
+      return [];
+    }
+
     const data: T[] = [];
     querySnapshot.forEach((docSnap) => {
       data.push({ id: docSnap.id, ...docSnap.data() } as unknown as T);
