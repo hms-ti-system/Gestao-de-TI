@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, Asset, License, Consumable, Activity, TimelineEvent } from "../types";
-import { initializeDbIfEmpty, saveDocument, deleteDocument, clearAllCollectionsAndCreateAdmin, clearSpecificCollections } from "../firebase";
+import { loadDatabaseFromFirestore, saveDocument, deleteDocument, clearAllCollectionsAndCreateAdmin, clearSpecificCollections } from "../firebase";
 
 interface Toast {
   id: string;
@@ -122,8 +122,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activities, setActivities] = useState<Activity[]>(() => {
     const saved = localStorage.getItem("ac_activities");
     if (saved) {
-      const parsed: Activity[] = JSON.parse(saved);
-      return parsed.filter((a) => !a.id.startsWith("act-"));
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
     }
     return [];
   });
@@ -155,29 +158,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem("ac_activities", JSON.stringify(activities));
   }, [activities]);
 
-  // Synchronize with Firestore on component mount
+  // Synchronize with Firestore on component mount - preserves all saved items in the database
   useEffect(() => {
     const syncWithFirebase = async () => {
       try {
-        // Clear activities collection in Firestore as requested to erase previous history
-        await clearSpecificCollections(["activities"]);
-
-        const data = await initializeDbIfEmpty(
-          initialUsers,
-          initialAssets(),
-          initialLicenses,
-          initialConsumables,
-          initialActivities
-        );
-        setUsers(data.users);
-        setAssets(data.assets || []);
-        setLicenses(data.licenses || []);
-        setConsumables(data.consumables || []);
-        setActivities([]);
-        localStorage.setItem("ac_activities", JSON.stringify([]));
+        const data = await loadDatabaseFromFirestore(initialUsers);
+        
+        if (data.users && data.users.length > 0) {
+          setUsers(data.users);
+        }
+        if (data.assets) {
+          setAssets(data.assets);
+        }
+        if (data.licenses) {
+          setLicenses(data.licenses);
+        }
+        if (data.consumables) {
+          setConsumables(data.consumables);
+        }
+        if (data.activities) {
+          setActivities(data.activities);
+        }
         
         // Ensure current logged-in user is in sync with latest DB state
-        if (currentUser) {
+        if (currentUser && data.users) {
           const match = data.users.find((u) => u.id === currentUser.id);
           if (match) {
             setCurrentUser(match);

@@ -62,13 +62,9 @@ export async function deleteDocument(collectionName: string, id: string): Promis
   }
 }
 
-// Helper to initialize database with mock data if empty
-export async function initializeDbIfEmpty(
-  initialUsers: any[],
-  initialAssets: any[],
-  initialLicenses: any[],
-  initialConsumables: any[],
-  initialActivities: any[]
+// Helper to load all application collections from Firestore without erasing or resetting saved data
+export async function loadDatabaseFromFirestore(
+  defaultUsers: any[]
 ): Promise<{
   users: any[];
   assets: any[];
@@ -77,85 +73,56 @@ export async function initializeDbIfEmpty(
   activities: any[];
 }> {
   try {
-    // Check users collection first
-    const usersList = await getCollectionData<any>("users");
-    if (usersList.length > 0) {
-      // Database already has data, fetch everything
-      const assetsList = await getCollectionData<any>("assets");
-      const licensesList = await getCollectionData<any>("licenses");
-      const consumablesList = await getCollectionData<any>("consumables");
-      const activitiesList = await getCollectionData<any>("activities");
-      return {
-        users: usersList,
-        assets: assetsList,
-        licenses: licensesList,
-        consumables: consumablesList,
-        activities: activitiesList
-      };
+    // 1. Fetch Users
+    let usersList = await getCollectionData<any>("users");
+    if (usersList.length === 0) {
+      console.log("Users collection is empty in Firestore. Seeding default users...");
+      const usersBatch = writeBatch(db);
+      defaultUsers.forEach((u) => {
+        const { id, ...rest } = u;
+        usersBatch.set(doc(db, "users", id), rest);
+      });
+      await usersBatch.commit();
+      usersList = defaultUsers;
     }
 
-    // Database is empty, seed it with mock data
-    console.log("Firestore is empty. Seeding database with initial mock data...");
-    
-    // Seed Users
-    const usersBatch = writeBatch(db);
-    initialUsers.forEach((u) => {
-      const { id, ...rest } = u;
-      usersBatch.set(doc(db, "users", id), rest);
-    });
-    await usersBatch.commit();
+    // 2. Fetch Assets, Licenses, Consumables, Activities directly from Firestore
+    const assetsList = await getCollectionData<any>("assets");
+    const licensesList = await getCollectionData<any>("licenses");
+    const consumablesList = await getCollectionData<any>("consumables");
+    const activitiesList = await getCollectionData<any>("activities");
 
-    // Seed Assets
-    const assetsBatch = writeBatch(db);
-    initialAssets.forEach((a) => {
-      const { id, ...rest } = a;
-      assetsBatch.set(doc(db, "assets", id), rest);
-    });
-    await assetsBatch.commit();
+    console.log(`Firestore data loaded successfully: ${usersList.length} users, ${assetsList.length} assets, ${licensesList.length} licenses, ${consumablesList.length} consumables, ${activitiesList.length} activities.`);
 
-    // Seed Licenses
-    const licensesBatch = writeBatch(db);
-    initialLicenses.forEach((l) => {
-      const { id, ...rest } = l;
-      licensesBatch.set(doc(db, "licenses", id), rest);
-    });
-    await licensesBatch.commit();
-
-    // Seed Consumables
-    const consumablesBatch = writeBatch(db);
-    initialConsumables.forEach((c) => {
-      const { id, ...rest } = c;
-      consumablesBatch.set(doc(db, "consumables", id), rest);
-    });
-    await consumablesBatch.commit();
-
-    // Seed Activities
-    const activitiesBatch = writeBatch(db);
-    initialActivities.forEach((act) => {
-      const { id, ...rest } = act;
-      activitiesBatch.set(doc(db, "activities", id), rest);
-    });
-    await activitiesBatch.commit();
-
-    console.log("Database seeded successfully!");
     return {
-      users: initialUsers,
-      assets: initialAssets,
-      licenses: initialLicenses,
-      consumables: initialConsumables,
-      activities: initialActivities
+      users: usersList,
+      assets: assetsList,
+      licenses: licensesList,
+      consumables: consumablesList,
+      activities: activitiesList
     };
   } catch (error) {
-    console.error("Error initializing database:", error);
+    console.error("Error loading database from Firestore:", error);
     return {
-      users: initialUsers,
-      assets: initialAssets,
-      licenses: initialLicenses,
-      consumables: initialConsumables,
-      activities: initialActivities
+      users: defaultUsers,
+      assets: [],
+      licenses: [],
+      consumables: [],
+      activities: []
     };
   }
 }
+
+// Deprecated alias for backwards compatibility
+export const initializeDbIfEmpty = async (
+  initialUsers: any[],
+  _initialAssets: any[],
+  _initialLicenses: any[],
+  _initialConsumables: any[],
+  _initialActivities: any[]
+) => {
+  return loadDatabaseFromFirestore(initialUsers);
+};
 
 // Function to delete specific collections from Firestore
 export async function clearSpecificCollections(colNames: string[]): Promise<void> {
