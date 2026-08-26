@@ -58,13 +58,32 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
   const [showEditModal, setShowEditModal] = useState(false);
 
   // Forms states
-  const [checkoutUser, setCheckoutUser] = useState(users[0]?.id || "");
-  const [checkoutLocation, setCheckoutLocation] = useState("Sede Principal");
+  const [checkoutUser, setCheckoutUser] = useState(users.filter(u => u.id !== "user-admin")[0]?.id || users[0]?.id || "");
+  const [checkoutLocation, setCheckoutLocation] = useState("Sede Principal (HQ)");
   const [checkoutNotes, setCheckoutNotes] = useState("");
   const [checkinStatus, setCheckinStatus] = useState<Asset["status"]>("Disponível");
   const [checkinCondition, setCheckinCondition] = useState("good");
   const [checkinLocation, setCheckinLocation] = useState("hq");
   const [checkinNotes, setCheckinNotes] = useState("");
+
+  const [customLocations, setCustomLocations] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("ac_custom_locations");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const uniqueLocations = Array.from(new Set([
+    "Sede Principal (HQ)",
+    "Remoto - Home Office",
+    "Escritório Regional SP",
+    "Laboratório TI",
+    "Estoque Central",
+    ...users.map(u => u.location),
+    ...customLocations
+  ].filter(Boolean)));
 
   const handleCopy = (text: string, label: string) => {
     if (!text) return;
@@ -144,6 +163,15 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
 
   const handleCheckoutSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (checkoutLocation.trim() && !customLocations.includes(checkoutLocation.trim())) {
+      const updated = [...customLocations, checkoutLocation.trim()];
+      setCustomLocations(updated);
+      try {
+        localStorage.setItem("ac_custom_locations", JSON.stringify(updated));
+      } catch (err) {
+        console.error(err);
+      }
+    }
     checkoutAsset(
       asset.id,
       checkoutUser,
@@ -693,6 +721,27 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
               </div>
             </div>
 
+            {asset && (
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100 mb-4 text-xs">
+                <div className="w-12 h-12 rounded-lg bg-white border border-slate-200 overflow-hidden flex items-center justify-center shrink-0 shadow-xs">
+                  {asset.image ? (
+                    <img 
+                      src={asset.image} 
+                      alt={asset.name} 
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <Laptop className="w-6 h-6 text-slate-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 truncate">{asset.name}</p>
+                  <p className="text-[10px] text-slate-400 font-medium">Tag: {asset.id} • S/N: {asset.seriesNumber || "—"}</p>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleCheckoutSubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
                 <label className="font-bold text-slate-500 uppercase tracking-wide">Selecionar Usuário Beneficiário</label>
@@ -709,15 +758,20 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
 
               <div className="space-y-1">
                 <label className="font-bold text-slate-500 uppercase tracking-wide">Local de Implantação</label>
-                <select
+                <input
+                  type="text"
+                  list="checkout-locations-list"
+                  required
+                  placeholder="ex: Sede Principal (HQ), Sala 204, Remoto..."
                   value={checkoutLocation}
                   onChange={(e) => setCheckoutLocation(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
-                >
-                  <option value="Sede Principal (HQ)">Sede Principal (HQ)</option>
-                  <option value="Remoto - Home Office">Remoto - Home Office</option>
-                  <option value="Escritório Regional SP">Escritório Regional SP</option>
-                </select>
+                />
+                <datalist id="checkout-locations-list">
+                  {uniqueLocations.map((loc) => (
+                    <option key={loc} value={loc} />
+                  ))}
+                </datalist>
               </div>
 
               <div className="space-y-1">
