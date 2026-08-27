@@ -1,6 +1,15 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { User, Asset, License, Consumable, Activity, TimelineEvent } from "../types";
-import { loadDatabaseFromFirestore, saveDocument, deleteDocument, clearAllCollectionsAndCreateAdmin, clearSpecificCollections } from "../firebase";
+import { 
+  loadDatabaseFromFirestore, 
+  saveDocument, 
+  deleteDocument, 
+  clearAllCollectionsAndCreateAdmin, 
+  clearSpecificCollections,
+  subscribeToCollection,
+  testFirestoreConnection,
+  firebaseConfig
+} from "../firebase";
 
 interface Toast {
   id: string;
@@ -8,6 +17,26 @@ interface Toast {
   message: string;
   type: "success" | "info" | "warning";
   visible: boolean;
+}
+
+export interface CloudConnectionInfo {
+  status: "connected" | "syncing" | "offline" | "error";
+  lastSync: Date | null;
+  databaseId: string;
+  projectId: string;
+  latencyMs: number | null;
+  lastTestResult?: {
+    success: boolean;
+    message: string;
+    latencyMs: number;
+    counts?: {
+      users: number;
+      assets: number;
+      licenses: number;
+      consumables: number;
+      activities: number;
+    };
+  };
 }
 
 interface AppContextType {
@@ -18,6 +47,7 @@ interface AppContextType {
   consumables: Consumable[];
   activities: Activity[];
   toast: Toast | null;
+  cloudInfo: CloudConnectionInfo;
   login: (identifier: string, password?: string) => boolean;
   logout: () => void;
   updateUserProfile: (userData: Partial<User>) => void;
@@ -38,6 +68,8 @@ interface AppContextType {
   resetDatabase: () => Promise<void>;
   clearItemTables: () => Promise<void>;
   clearAllActivities: () => Promise<void>;
+  forceCloudSync: () => Promise<void>;
+  testConnection: () => Promise<any>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -133,6 +165,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [toast, setToast] = useState<Toast | null>(null);
 
+  const [cloudInfo, setCloudInfo] = useState<CloudConnectionInfo>({
+    status: "syncing",
+    lastSync: null,
+    databaseId: firebaseConfig.firestoreDatabaseId || "(default)",
+    projectId: firebaseConfig.projectId || "gen-lang-client",
+    latencyMs: null
+  });
+
   // Sync state to local storage
   useEffect(() => {
     localStorage.setItem("ac_user", JSON.stringify(currentUser));
@@ -158,25 +198,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem("ac_activities", JSON.stringify(activities));
   }, [activities]);
 
-  // Synchronize with Firestore on component mount - preserves all saved items in the database
+  const forceCloudSync = useCallback(async () => {
+    setCloudInfo(prev => ({ ...prev, status: "syncing" }));
+    try {
+      const data = await loadDatabaseFromFirestore(initialUsers);
+      
+      if (data.users && data.users.length > 0) {
+        setUsers(data.users);
+      }
+      if (data.assets) {
+        setAssets(data.assets);
+      }
+      if (data.licenses) {
+        setLicenses(data.licenses);
+      }
+      if (data.consumables) {
+        setConsumables(data.consumables);
+      }
+      if (data.activities) {
+        setActivities(data.activities);
+      }
+
+      setCloudInfo(prev => ({
+        ...prev,
+        status: "connected",
+        lastSync: new Date()
+      }));
+    } catch (err) {
+      console.error("Force cloud sync failed:", err);
+      setCloudInfo(prev => ({ ...prev, status: "error" }));
+    }
+  }, []);
+
+  const testConnection = useCallback(async () => {
+    setCloudInfo(prev => ({ ...prev, status: "syncing" }));
+    const result = await testFirestoreConnection();
+    setCloudInfo(prev => ({
+      ...prev,
+      status: result.success ? "connected" : "error",
+      lastSync: result.success ? new Date() : prev.lastSync,
+      latencyMs: result.latencyMs,
+      lastTestResult: result
+    }));
+    return result;
+  }, []);
+
+  // Synchronize with Firestore on component mount and subscribe to realtime updates
   useEffect(() => {
-    const syncWithFirebase = async () => {
+    let isMounted = true;
+
+    const initFirebaseSync = async () => {
       try {
+        setCloudInfo(prev => ({ ...prev, status: "syncing" }));
         const data = await loadDatabaseFromFirestore(initialUsers);
         
+        if (!isMounted) return;
+
         if (data.users && data.users.length > 0) {
           setUsers(data.users);
         }
-        if (data.assets && data.assets.length > 0) {
+        if (data.assets) {
           setAssets(data.assets);
         }
-        if (data.licenses && data.licenses.length > 0) {
+        if (data.licenses) {
           setLicenses(data.licenses);
         }
-        if (data.consumables && data.consumables.length > 0) {
+        if (data.consumables) {
           setConsumables(data.consumables);
         }
-        if (data.activities && data.activities.length > 0) {
+        if (data.activities) {
           setActivities(data.activities);
         }
         
@@ -187,11 +277,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setCurrentUser(match);
           }
         }
+
+        setCloudInfo(prev => ({
+          ...prev,
+          status: "connected",
+          lastSync: new Date()
+        }));
       } catch (error) {
         console.error("Failed to sync with Firestore on mount:", error);
+        if (isMounted) {
+          setCloudInfo(prev => ({ ...prev, status: "error" }));
+        }
       }
     };
-    syncWithFirebase();
+
+    initFirebaseSync();
+
+    // Subscribe to realtime changes in assets, users, licenses, consumables
+    const unsubAssets = subscribeToCollection<Asset>("assets", (liveAssets) => {
+      if (liveAssets.length > 0) {
+        setAssets(liveAssets);
+        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
+      }
+    });
+
+    const unsubUsers = subscribeToCollection<User>("users", (liveUsers) => {
+      if (liveUsers.length > 0) {
+        setUsers(liveUsers);
+        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
+      }
+    });
+
+    const unsubLicenses = subscribeToCollection<License>("licenses", (liveLicenses) => {
+      if (liveLicenses.length > 0) {
+        setLicenses(liveLicenses);
+        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
+      }
+    });
+
+    const unsubConsumables = subscribeToCollection<Consumable>("consumables", (liveConsumables) => {
+      if (liveConsumables.length > 0) {
+        setConsumables(liveConsumables);
+        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
+      }
+    });
+
+    const unsubActivities = subscribeToCollection<Activity>("activities", (liveActivities) => {
+      if (liveActivities.length > 0) {
+        setActivities(liveActivities);
+        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubAssets();
+      unsubUsers();
+      unsubLicenses();
+      unsubConsumables();
+      unsubActivities();
+    };
   }, []);
 
   const showToast = (title: string, message: string, type: "success" | "info" | "warning" = "success") => {
@@ -750,6 +895,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         consumables,
         activities,
         toast,
+        cloudInfo,
         login,
         logout,
         updateUserProfile,
@@ -770,6 +916,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetDatabase,
         clearItemTables,
         clearAllActivities,
+        forceCloudSync,
+        testConnection,
       }}
     >
       {children}

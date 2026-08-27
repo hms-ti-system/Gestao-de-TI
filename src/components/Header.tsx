@@ -8,7 +8,13 @@ import {
   ChevronDown, 
   Laptop, 
   AlertTriangle,
-  UserCheck
+  UserCheck,
+  Database,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
+  Activity as ActivityIcon,
+  ShieldCheck
 } from "lucide-react";
 import { Asset } from "../types";
 
@@ -23,14 +29,20 @@ export const Header: React.FC<HeaderProps> = ({
   setCurrentView,
   setSelectedAssetId 
 }) => {
-  const { currentUser, assets, consumables } = useApp();
+  const { currentUser, assets, consumables, cloudInfo, forceCloudSync, testConnection } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showDbModal, setShowDbModal] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<any>(cloudInfo.lastTestResult || null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const searchRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const dbModalRef = useRef<HTMLDivElement>(null);
 
-  // Close suggestions and notifications when clicking outside
+  // Close suggestions, notifications, and db modal when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -39,10 +51,32 @@ export const Header: React.FC<HeaderProps> = ({
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setShowNotifications(false);
       }
+      if (dbModalRef.current && !dbModalRef.current.contains(e.target as Node)) {
+        setShowDbModal(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleRunTest = async () => {
+    setIsTesting(true);
+    try {
+      const result = await testConnection();
+      setTestResult(result);
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleForceSync = async () => {
+    setIsSyncing(true);
+    try {
+      await forceCloudSync();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Filter assets based on query
   const filteredSuggestions = searchQuery.trim() === "" 
@@ -150,10 +184,148 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Header actions */}
       <div className="flex items-center gap-3">
+        {/* Firebase Cloud Connection Status Badge */}
+        <div ref={dbModalRef} className="relative">
+          <button
+            onClick={() => setShowDbModal(!showDbModal)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+              cloudInfo.status === "connected"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                : cloudInfo.status === "syncing"
+                ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+            }`}
+            title="Clique para ver o status da conexão Firebase Firestore"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                cloudInfo.status === "connected" ? "bg-emerald-400" : cloudInfo.status === "syncing" ? "bg-blue-400" : "bg-amber-400"
+              }`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                cloudInfo.status === "connected" ? "bg-emerald-600" : cloudInfo.status === "syncing" ? "bg-blue-600" : "bg-amber-600"
+              }`}></span>
+            </span>
+            <Database className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">
+              {cloudInfo.status === "connected" ? "Firebase Cloud Conectado" : cloudInfo.status === "syncing" ? "Sincronizando..." : "Firestore Offline/Cache"}
+            </span>
+          </button>
+
+          {/* Database Info Popover */}
+          {showDbModal && (
+            <div className="absolute right-0 mt-3 w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-50 p-5 divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-150">
+              <div className="pb-4">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                      <ShieldCheck className="w-5 h-5" />
+                    </div>
+                    <h3 className="font-bold text-sm text-slate-800">Status do Banco de Dados</h3>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    cloudInfo.status === "connected" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                  }`}>
+                    {cloudInfo.status === "connected" ? "Ativo em Nuvem" : "Verificando"}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Os dados estão conectados diretamente ao Google Cloud Firestore com sincronização em tempo real.
+                </p>
+              </div>
+
+              <div className="py-3 space-y-2.5 text-xs">
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-500 font-medium">Instância Firestore:</span>
+                  <span className="font-mono text-slate-700 font-semibold truncate max-w-[180px] text-right" title={cloudInfo.databaseId}>
+                    {cloudInfo.databaseId}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-500 font-medium">Projeto Google Cloud:</span>
+                  <span className="font-mono text-slate-700 font-semibold">
+                    {cloudInfo.projectId}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-50">
+                  <span className="text-slate-500 font-medium">Última Sincronização:</span>
+                  <span className="text-slate-700 font-medium">
+                    {cloudInfo.lastSync ? cloudInfo.lastSync.toLocaleTimeString("pt-BR") : "Iniciando..."}
+                  </span>
+                </div>
+                {cloudInfo.latencyMs !== null && (
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Latência de Comunicação:</span>
+                    <span className="text-emerald-700 font-bold">
+                      {cloudInfo.latencyMs} ms
+                    </span>
+                  </div>
+                )}
+
+                {/* Counts from live test */}
+                {testResult?.counts && (
+                  <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200/60">
+                    <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <ActivityIcon className="w-3.5 h-3.5 text-blue-600" />
+                      Documentos Gravados no Firestore
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                      <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-xs">
+                        <div className="font-bold text-slate-800 text-sm">{testResult.counts.assets}</div>
+                        <div className="text-[10px] text-slate-400 font-medium">Ativos</div>
+                      </div>
+                      <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-xs">
+                        <div className="font-bold text-slate-800 text-sm">{testResult.counts.users}</div>
+                        <div className="text-[10px] text-slate-400 font-medium">Usuários</div>
+                      </div>
+                      <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-xs">
+                        <div className="font-bold text-slate-800 text-sm">{testResult.counts.licenses}</div>
+                        <div className="text-[10px] text-slate-400 font-medium">Licenças</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="pt-4 space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleRunTest}
+                    disabled={isTesting}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50 shadow-xs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? "animate-spin" : ""}`} />
+                    {isTesting ? "Testando..." : "Testar Conexão"}
+                  </button>
+                  <button
+                    onClick={handleForceSync}
+                    disabled={isSyncing}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
+                    title="Recarregar todos os dados diretamente do Firebase Firestore"
+                  >
+                    <Database className={`w-3.5 h-3.5 ${isSyncing ? "animate-pulse text-blue-600" : ""}`} />
+                    {isSyncing ? "Sincronizando..." : "Sincronizar"}
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setCurrentView("settings");
+                    setShowDbModal(false);
+                  }}
+                  className="w-full py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span>Abrir Configurações do Sistema</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Help Circle */}
         <button 
           onClick={() => {
-            alert("Ajuda Gestor de Ativos:\n- Use o menu lateral para navegar entre telas.\n- Você pode entregar ou devolver notebooks.\n- O estoque de consumíveis diminui em tempo real ao clicar em Checkout.\n- Acesse a tela de Perfil para modificar suas informações.");
+            alert("Ajuda Gestor de Ativos:\n- Conexão em nuvem ativa com o Firebase Firestore.\n- Use o menu lateral para navegar entre telas.\n- Você pode cadastrar, entregar ou devolver notebooks.\n- O estoque de consumíveis atualiza em tempo real.\n- Acesse a tela de Perfil para modificar suas informações.");
           }}
           className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors hidden sm:flex"
           title="Ajuda e Documentação"

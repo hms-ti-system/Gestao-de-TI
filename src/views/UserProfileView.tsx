@@ -7,11 +7,14 @@ import {
   Mail, 
   Laptop, 
   Clock, 
-  Settings, 
+  Settings as SettingsIcon, 
   ShieldCheck, 
   AlertCircle,
   Camera,
-  RotateCcw
+  RotateCcw,
+  KeyRound,
+  ExternalLink,
+  CheckCircle2
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Asset } from "../types";
@@ -23,7 +26,11 @@ const presetAvatars = [
   "https://lh3.googleusercontent.com/aida-public/AB6AXuBIPbFrB9pdZW6k_JE52kQw8DtTZXW37vYounYCsA1_D1mXFeE6mHwwtvvkN21VtQ0E2sD36CUxBvbDu6baPfCsG8teOU7_htO4yjqxRQcQh6G1_iwE1iAB9B-_BX0KDTFHFPh-zZ8-aEI-twJHk6_7Vt2GiS_Glo6ShD72GEl6Weq-KHaNmcH7EBHdnkqoGRJOo9UbqcoNV3pitKJcWYli9hncg0E6TShtZPqXyJDJ3HTS5KfW7iQszDdZxb_Na6fFo23Z4rVTx5o",
 ];
 
-export const UserProfileView: React.FC = () => {
+interface UserProfileViewProps {
+  setCurrentView?: (view: string) => void;
+}
+
+export const UserProfileView: React.FC<UserProfileViewProps> = ({ setCurrentView }) => {
   const { currentUser, assets, updateUserProfile, checkinAsset, showToast } = useApp();
   const [isEditing, setIsEditing] = useState(false);
 
@@ -32,9 +39,10 @@ export const UserProfileView: React.FC = () => {
   const [role, setRole] = useState(currentUser?.role || "");
   const [location, setLocation] = useState(currentUser?.location || "");
   const [department, setDepartment] = useState(currentUser?.department || "");
-  const [avatar, setAvatar] = useState(currentUser?.avatar || "");
+  const [email, setEmail] = useState(currentUser?.email || "");
   const [username, setUsername] = useState(currentUser?.username || "");
   const [password, setPassword] = useState(currentUser?.password || "");
+  const [avatar, setAvatar] = useState(currentUser?.avatar || "");
 
   const headerFileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -168,7 +176,7 @@ export const UserProfileView: React.FC = () => {
           onClick={() => setIsEditing(!isEditing)}
           className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg cursor-pointer transition-colors shrink-0 shadow-sm flex items-center gap-2"
         >
-          <Settings className="w-4 h-4" />
+          <SettingsIcon className="w-4 h-4" />
           <span>{isEditing ? "Cancelar" : "Editar Detalhes"}</span>
         </button>
       </div>
@@ -352,30 +360,77 @@ export const UserProfileView: React.FC = () => {
               </form>
             </div>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-              <h4 className="font-sans text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Credenciais de Acesso</h4>
-              
-              <div className="space-y-4 text-xs">
-                <div className="p-3 bg-green-50 border border-green-100 rounded-lg flex gap-2">
-                  <ShieldCheck className="w-5 h-5 text-green-600 shrink-0" />
-                  <div>
-                    <h5 className="font-bold text-green-800">Chave API Sincronizada</h5>
-                    <p className="text-slate-500 mt-1 leading-normal">
-                      Seu agente central local está conectado com a nuvem Gestor de Ativos com segurança.
-                    </p>
+            <div className="space-y-6">
+              {/* Account Details Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    Detalhes da Conta
+                  </h4>
+                  <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[11px] font-bold">
+                    Conta Ativa
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Nome de Usuário:</span>
+                    <span className="font-mono font-semibold text-slate-800">
+                      @{currentUser.username || currentUser.email.split("@")[0]}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">E-mail Corporativo:</span>
+                    <span className="font-semibold text-slate-800">{currentUser.email}</span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Departamento:</span>
+                    <span className="font-semibold text-slate-800">{currentUser.department}</span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Localidade:</span>
+                    <span className="font-semibold text-slate-800">{currentUser.location}</span>
+                  </div>
+
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-500 font-medium">Tipo de Acesso:</span>
+                    <span className="font-semibold text-blue-700">
+                      {currentUser.id === "user-admin" ? "Administrador Master" : "Colaborador"}
+                    </span>
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg flex gap-2">
-                  <AlertCircle className="w-5 h-5 text-slate-400 shrink-0" />
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer mt-2"
+                >
+                  <SettingsIcon className="w-4 h-4" />
+                  Editar Meus Dados
+                </button>
+              </div>
+
+              {/* Shortcut to Settings menu */}
+              {setCurrentView && (
+                <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-xs flex items-center justify-between">
                   <div>
-                    <h5 className="font-bold text-slate-700">Nível de Permissão</h5>
-                    <p className="text-slate-500 mt-1 leading-normal">
-                      {currentUser.id === "user-admin" ? "Acesso de Leitura & Escrita de Ativos" : "Acesso Restrito ao Usuário / Responsabilidade Pessoal"}
+                    <h5 className="font-bold text-xs">Configurações do Sistema</h5>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Banco de dados Firestore, credenciais e ferramentas
                     </p>
                   </div>
+                  <button
+                    onClick={() => setCurrentView("settings")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  >
+                    <span>Acessar</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

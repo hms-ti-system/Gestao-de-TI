@@ -10,6 +10,7 @@ import { Consumables } from "./views/Consumables";
 import { Licenses } from "./views/Licenses";
 import { Users } from "./views/Users";
 import { UserProfileView } from "./views/UserProfileView";
+import { Settings as SettingsView } from "./views/Settings";
 import { motion, AnimatePresence } from "motion/react";
 import { X, CheckCircle, AlertTriangle, Info } from "lucide-react";
 
@@ -64,7 +65,9 @@ const MainLayout: React.FC = () => {
       case "users":
         return <Users />;
       case "profile":
-        return <UserProfileView />;
+        return <UserProfileView setCurrentView={setCurrentView} />;
+      case "settings":
+        return <SettingsView />;
       default:
         return (
           <Dashboard 

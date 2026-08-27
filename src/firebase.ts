@@ -4,12 +4,17 @@ import {
   collection, 
   doc, 
   setDoc, 
+  getDoc,
   getDocs, 
   updateDoc, 
   deleteDoc,
-  writeBatch
+  writeBatch,
+  onSnapshot,
+  Unsubscribe
 } from "firebase/firestore";
 import config from "../firebase-applet-config.json";
+
+export const firebaseConfig = config;
 
 const app = initializeApp(config);
 
@@ -23,18 +28,101 @@ export const db = initializeFirestore(
   config.firestoreDatabaseId || undefined
 );
 
-// Helper to fetch all documents from a collection with safe timeout
-export async function getCollectionData<T>(collectionName: string, timeoutMs: number = 5000): Promise<T[]> {
+// Sanitizer to remove undefined values and ensure clean objects for Firestore
+export function sanitizeForFirestore<T>(data: T): any {
+  if (data === undefined) return null;
+  if (data === null || typeof data !== "object") return data;
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeForFirestore(item));
+  }
+  const clean: Record<string, any> = {};
+  for (const key of Object.keys(data as Record<string, any>)) {
+    const val = (data as Record<string, any>)[key];
+    if (val !== undefined) {
+      clean[key] = sanitizeForFirestore(val);
+    }
+  }
+  return clean;
+}
+
+// Test live Firestore connectivity with real read & write verification
+export async function testFirestoreConnection(): Promise<{
+  success: boolean;
+  message: string;
+  latencyMs: number;
+  databaseId: string;
+  projectId: string;
+  counts?: {
+    users: number;
+    assets: number;
+    licenses: number;
+    consumables: number;
+    activities: number;
+  };
+}> {
+  const start = performance.now();
+  const dbId = config.firestoreDatabaseId || "(default)";
+  const projId = config.projectId || "gen-lang-client";
+  
   try {
-    const fetchPromise = getDocs(collection(db, collectionName));
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
-    
-    const querySnapshot = await Promise.race([fetchPromise, timeoutPromise]);
-    if (!querySnapshot) {
-      console.warn(`Firestore query for "${collectionName}" timed out (${timeoutMs}ms). Using local cached state.`);
-      return [];
+    // 1. Write a test verification ping document
+    const testDocRef = doc(db, "_system_status", "connection_check");
+    const testPayload = {
+      lastChecked: new Date().toISOString(),
+      timestamp: Date.now(),
+      status: "connected",
+      environment: "production"
+    };
+    await setDoc(testDocRef, testPayload);
+
+    // 2. Read it back
+    const snap = await getDoc(testDocRef);
+    if (!snap.exists()) {
+      throw new Error("O documento de verificação foi gravado mas não pôde ser lido de volta.");
     }
 
+    // 3. Count documents in main collections
+    const [uSnap, aSnap, lSnap, cSnap, actSnap] = await Promise.all([
+      getDocs(collection(db, "users")),
+      getDocs(collection(db, "assets")),
+      getDocs(collection(db, "licenses")),
+      getDocs(collection(db, "consumables")),
+      getDocs(collection(db, "activities"))
+    ]);
+
+    const latencyMs = Math.round(performance.now() - start);
+
+    return {
+      success: true,
+      message: "Conexão com o Firebase Firestore ativa e verificada com sucesso em nuvem.",
+      latencyMs,
+      databaseId: dbId,
+      projectId: projId,
+      counts: {
+        users: uSnap.size,
+        assets: aSnap.size,
+        licenses: lSnap.size,
+        consumables: cSnap.size,
+        activities: actSnap.size
+      }
+    };
+  } catch (error: any) {
+    const latencyMs = Math.round(performance.now() - start);
+    console.error("Firestore connection test failed:", error);
+    return {
+      success: false,
+      message: error?.message || "Não foi possível comunicar com o Firebase Firestore.",
+      latencyMs,
+      databaseId: dbId,
+      projectId: projId
+    };
+  }
+}
+
+// Helper to fetch all documents from a collection with proper error handling
+export async function getCollectionData<T>(collectionName: string): Promise<T[]> {
+  try {
+    const querySnapshot = await getDocs(collection(db, collectionName));
     const data: T[] = [];
     querySnapshot.forEach((docSnap) => {
       data.push({ id: docSnap.id, ...docSnap.data() } as unknown as T);
@@ -46,32 +134,65 @@ export async function getCollectionData<T>(collectionName: string, timeoutMs: nu
   }
 }
 
-// Helper to save a single document (add or overwrite)
-export async function saveDocument<T extends { id: string }>(collectionName: string, data: T): Promise<void> {
+// Real-time subscription to a collection
+export function subscribeToCollection<T>(
+  collectionName: string, 
+  callback: (data: T[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, collectionName),
+    (snapshot) => {
+      const data: T[] = [];
+      snapshot.forEach((docSnap) => {
+        data.push({ id: docSnap.id, ...docSnap.data() } as unknown as T);
+      });
+      callback(data);
+    },
+    (error) => {
+      console.warn(`Realtime snapshot error on ${collectionName}:`, error);
+      if (onError) onError(error);
+    }
+  );
+}
+
+// Helper to save a single document (add or overwrite) to Firestore
+export async function saveDocument<T extends { id: string }>(collectionName: string, data: T): Promise<boolean> {
   try {
     const { id, ...rest } = data;
-    await setDoc(doc(db, collectionName, id), rest);
+    const cleanData = sanitizeForFirestore(rest);
+    await setDoc(doc(db, collectionName, id), cleanData);
+    console.log(`[Firestore Cloud] Documento salvo com sucesso em "${collectionName}/${id}"`);
+    return true;
   } catch (error) {
-    console.error(`Error saving document in ${collectionName}:`, error);
+    console.error(`[Firestore Cloud Error] Falha ao salvar documento em ${collectionName}/${data.id}:`, error);
+    return false;
   }
 }
 
 // Helper to update a document partially
-export async function updateDocument(collectionName: string, id: string, data: Record<string, any>): Promise<void> {
+export async function updateDocument(collectionName: string, id: string, data: Record<string, any>): Promise<boolean> {
   try {
     const docRef = doc(db, collectionName, id);
-    await updateDoc(docRef, data);
+    const cleanData = sanitizeForFirestore(data);
+    await updateDoc(docRef, cleanData);
+    console.log(`[Firestore Cloud] Documento atualizado em "${collectionName}/${id}"`);
+    return true;
   } catch (error) {
-    console.error(`Error updating document in ${collectionName}:`, error);
+    console.error(`[Firestore Cloud Error] Falha ao atualizar documento em ${collectionName}/${id}:`, error);
+    return false;
   }
 }
 
 // Helper to delete a document
-export async function deleteDocument(collectionName: string, id: string): Promise<void> {
+export async function deleteDocument(collectionName: string, id: string): Promise<boolean> {
   try {
     await deleteDoc(doc(db, collectionName, id));
+    console.log(`[Firestore Cloud] Documento excluído de "${collectionName}/${id}"`);
+    return true;
   } catch (error) {
-    console.error(`Error deleting document in ${collectionName}:`, error);
+    console.error(`[Firestore Cloud Error] Falha ao excluir documento de ${collectionName}/${id}:`, error);
+    return false;
   }
 }
 
@@ -93,7 +214,7 @@ export async function loadDatabaseFromFirestore(
       const usersBatch = writeBatch(db);
       defaultUsers.forEach((u) => {
         const { id, ...rest } = u;
-        usersBatch.set(doc(db, "users", id), rest);
+        usersBatch.set(doc(db, "users", id), sanitizeForFirestore(rest));
       });
       await usersBatch.commit();
       usersList = defaultUsers;
@@ -173,6 +294,6 @@ export async function clearAllCollectionsAndCreateAdmin(adminUser: any): Promise
   
   // Save the admin user
   const { id, ...rest } = adminUser;
-  await setDoc(doc(db, "users", id), rest);
+  await setDoc(doc(db, "users", id), sanitizeForFirestore(rest));
   console.log("Master Admin user recreated in Firestore successfully!");
 }
