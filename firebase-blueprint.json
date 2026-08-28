@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System users and managers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "department": { "type": "string" },
+        "location": { "type": "string" },
+        "avatar": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "isAdmin": { "type": "boolean" }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "Asset": {
+      "title": "Asset",
+      "description": "Hardware and IT assets",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "seriesNumber": { "type": "string" },
+        "manufacturer": { "type": "string" },
+        "model": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" },
+        "assignedToUserId": { "type": "string" },
+        "assignedToUser": { "type": "object" },
+        "image": { "type": "string" },
+        "description": { "type": "string" },
+        "health": { "type": "number" },
+        "history": { "type": "array" }
+      },
+      "required": ["id", "name", "status"]
+    },
+    "License": {
+      "title": "License",
+      "description": "Software licenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "software": { "type": "string" },
+        "supplier": { "type": "string" },
+        "key": { "type": "string" },
+        "seatsTotal": { "type": "number" },
+        "seatsUsed": { "type": "number" },
+        "expirationDate": { "type": "string" },
+        "status": { "type": "string" },
+        "iconType": { "type": "string" }
+      },
+      "required": ["id", "name", "software"]
+    },
+    "Consumable": {
+      "title": "Consumable",
+      "description": "Office and IT consumables",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "quantityRemaining": { "type": "number" },
+        "quantityTotal": { "type": "number" },
+        "status": { "type": "string" },
+        "iconName": { "type": "string" }
+      },
+      "required": ["id", "name", "quantityRemaining", "quantityTotal"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "Audit trail and activity log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "user": { "type": "string" },
+        "action": { "type": "string" },
+        "target": { "type": "string" },
+        "details": { "type": "string" },
+        "time": { "type": "string" },
+        "type": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["id", "action", "target"]
+    }
+  },
+  "firestore": {
+    "rules": "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}"
+  }
+}

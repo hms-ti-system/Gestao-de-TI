@@ -651,3 +651,42 @@ export async function clearSupabaseTables(tables: string[]): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Subscribe to Supabase Postgres Realtime changes across tables
+ */
+export function subscribeToSupabaseRealtime(
+  onDataChanged: (table: string) => void
+): { unsubscribe: () => void } | null {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  try {
+    const channel = client
+      .channel("app-realtime-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public" },
+        (payload) => {
+          if (payload && payload.table) {
+            onDataChanged(payload.table);
+          }
+        }
+      )
+      .subscribe();
+
+    return {
+      unsubscribe: () => {
+        try {
+          client.removeChannel(channel);
+        } catch (e) {
+          console.warn("Error removing Supabase channel:", e);
+        }
+      },
+    };
+  } catch (error) {
+    console.warn("Could not attach Supabase realtime listener:", error);
+    return null;
+  }
+}
+

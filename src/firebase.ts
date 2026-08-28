@@ -145,7 +145,7 @@ export function subscribeToCollection<T>(
     (snapshot) => {
       const data: T[] = [];
       snapshot.forEach((docSnap) => {
-        data.push({ id: docSnap.id, ...docSnap.data() } as unknown as T);
+        data.push({ ...docSnap.data(), id: docSnap.id } as unknown as T);
       });
       callback(data);
     },
@@ -159,10 +159,9 @@ export function subscribeToCollection<T>(
 // Helper to save a single document (add or overwrite) to Firestore
 export async function saveDocument<T extends { id: string }>(collectionName: string, data: T): Promise<boolean> {
   try {
-    const { id, ...rest } = data;
-    const cleanData = sanitizeForFirestore(rest);
-    await setDoc(doc(db, collectionName, id), cleanData);
-    console.log(`[Firestore Cloud] Documento salvo com sucesso em "${collectionName}/${id}"`);
+    const cleanData = sanitizeForFirestore(data);
+    await setDoc(doc(db, collectionName, data.id), cleanData);
+    console.log(`[Firestore Cloud] Documento salvo com sucesso em "${collectionName}/${data.id}"`);
     return true;
   } catch (error) {
     console.error(`[Firestore Cloud Error] Falha ao salvar documento em ${collectionName}/${data.id}:`, error);

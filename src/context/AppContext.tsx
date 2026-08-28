@@ -25,6 +25,7 @@ import {
   saveDocumentToSupabase,
   deleteDocumentFromSupabase,
   clearSupabaseTables,
+  subscribeToSupabaseRealtime,
   SupabaseConfig
 } from "../supabase";
 
@@ -278,18 +279,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   // Dual-persistence helpers
-  const persistSave = useCallback((collectionName: string, item: any) => {
-    // 1. Save to Firebase
-    saveDocument(collectionName, item);
-    // 2. Save to Supabase (if configured)
-    saveDocumentToSupabase(collectionName, item).catch(() => {});
+  const persistSave = useCallback(async (collectionName: string, item: any) => {
+    try {
+      // 1. Save to Firebase Firestore
+      await saveDocument(collectionName, item);
+    } catch (err) {
+      console.warn(`[Firestore Cloud] Falha ao salvar em ${collectionName}:`, err);
+    }
+
+    try {
+      // 2. Mirror save to Supabase (if configured)
+      await saveDocumentToSupabase(collectionName, item);
+    } catch (err) {
+      console.warn(`[Supabase Cloud] Falha ao espelhar em ${collectionName}:`, err);
+    }
   }, []);
 
-  const persistDelete = useCallback((collectionName: string, id: string) => {
-    // 1. Delete from Firebase
-    deleteDocument(collectionName, id);
-    // 2. Delete from Supabase (if configured)
-    deleteDocumentFromSupabase(collectionName, id).catch(() => {});
+  const persistDelete = useCallback(async (collectionName: string, id: string) => {
+    try {
+      // 1. Delete from Firebase Firestore
+      await deleteDocument(collectionName, id);
+    } catch (err) {
+      console.warn(`[Firestore Cloud] Falha ao excluir ${collectionName}/${id}:`, err);
+    }
+
+    try {
+      // 2. Mirror delete from Supabase (if configured)
+      await deleteDocumentFromSupabase(collectionName, id);
+    } catch (err) {
+      console.warn(`[Supabase Cloud] Falha ao espelhar exclusão ${collectionName}/${id}:`, err);
+    }
   }, []);
 
   // Sync state to local storage
@@ -390,93 +409,85 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return result;
   }, []);
 
-  // Synchronize with Firestore on component mount and subscribe to realtime updates
+  // Synchronize with databases on component mount and subscribe to realtime updates
   useEffect(() => {
     let isMounted = true;
 
-    const initFirebaseSync = async () => {
+    const initDbSync = async () => {
       try {
-        setCloudInfo(prev => ({ ...prev, status: "syncing" }));
-        const data = await loadDatabaseFromFirestore(initialUsers);
-        
-        if (!isMounted) return;
+        const activeProv = getActiveDbProvider();
+        if (activeProv === "supabase") {
+          const sData = await loadDatabaseFromSupabase(initialUsers);
+          if (!isMounted) return;
+          if (sData.users && sData.users.length > 0) setUsers(sData.users);
+          if (sData.assets) setAssets(sData.assets);
+          if (sData.licenses) setLicenses(sData.licenses);
+          if (sData.consumables) setConsumables(sData.consumables);
+          if (sData.activities) setActivities(sData.activities);
+        } else {
+          setCloudInfo(prev => ({ ...prev, status: "syncing" }));
+          const data = await loadDatabaseFromFirestore(initialUsers);
+          if (!isMounted) return;
+          if (data.users && data.users.length > 0) setUsers(data.users);
+          if (data.assets) setAssets(data.assets);
+          if (data.licenses) setLicenses(data.licenses);
+          if (data.consumables) setConsumables(data.consumables);
+          if (data.activities) setActivities(data.activities);
 
-        if (data.users && data.users.length > 0) {
-          setUsers(data.users);
+          setCloudInfo(prev => ({
+            ...prev,
+            status: "connected",
+            lastSync: new Date()
+          }));
         }
-        if (data.assets) {
-          setAssets(data.assets);
-        }
-        if (data.licenses) {
-          setLicenses(data.licenses);
-        }
-        if (data.consumables) {
-          setConsumables(data.consumables);
-        }
-        if (data.activities) {
-          setActivities(data.activities);
-        }
-        
-        // Ensure current logged-in user is in sync with latest DB state
-        if (currentUser && data.users) {
-          const match = data.users.find((u) => u.id === currentUser.id);
-          if (match) {
-            setCurrentUser(match);
-          }
-        }
-
-        setCloudInfo(prev => ({
-          ...prev,
-          status: "connected",
-          lastSync: new Date()
-        }));
       } catch (error) {
-        console.error("Failed to sync with Firestore on mount:", error);
-        if (isMounted) {
-          setCloudInfo(prev => ({ ...prev, status: "error" }));
-        }
+        console.error("Failed to sync initial database on mount:", error);
       }
     };
 
-    initFirebaseSync();
+    initDbSync();
 
-    // Subscribe to realtime changes in assets, users, licenses, consumables
+    // 1. Subscribe to realtime Firestore changes
     const unsubAssets = subscribeToCollection<Asset>("assets", (liveAssets) => {
-      if (liveAssets.length > 0) {
-        setAssets(liveAssets);
-        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
-      }
+      if (!isMounted) return;
+      setAssets(liveAssets);
+      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
     });
 
     const unsubUsers = subscribeToCollection<User>("users", (liveUsers) => {
-      if (liveUsers.length > 0) {
+      if (!isMounted) return;
+      if (liveUsers && liveUsers.length > 0) {
         setUsers(liveUsers);
-        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
       }
+      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
     });
 
     const unsubLicenses = subscribeToCollection<License>("licenses", (liveLicenses) => {
-      if (liveLicenses.length > 0) {
-        setLicenses(liveLicenses);
-        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
-      }
+      if (!isMounted) return;
+      setLicenses(liveLicenses);
+      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
     });
 
     const unsubConsumables = subscribeToCollection<Consumable>("consumables", (liveConsumables) => {
-      if (liveConsumables.length > 0) {
-        setConsumables(liveConsumables);
-        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
-      }
+      if (!isMounted) return;
+      setConsumables(liveConsumables);
+      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
     });
 
     const unsubActivities = subscribeToCollection<Activity>("activities", (liveActivities) => {
-      if (liveActivities.length > 0) {
-        setActivities(liveActivities);
-        setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
-      }
+      if (!isMounted) return;
+      setActivities(liveActivities);
+      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
     });
 
-    // Subscribe to system database configuration in Firestore (syncs Supabase URL, key, and provider across all devices)
+    // 2. Subscribe to Supabase Postgres Realtime changes
+    const supaRealtimeSub = subscribeToSupabaseRealtime((_table) => {
+      if (!isMounted) return;
+      console.log(`[Supabase Realtime] Mudança detectada na tabela ${_table}, atualizando dados locais...`);
+      forceCloudSync();
+    });
+
+    // 3. Subscribe to system database configuration in Firestore (syncs credentials across devices)
     const unsubSystemConfig = subscribeToSystemDbConfig((cloudDbCfg) => {
       if (!isMounted) return;
       if (cloudDbCfg) {
@@ -514,7 +525,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setDbProviderState(cloudDbCfg.activeProvider);
         }
       } else {
-        // If Firestore has no settings yet, but this device has local Supabase credentials, push to Firestore
         const localCfg = getSavedSupabaseConfig();
         const localProv = getActiveDbProvider();
         if (localCfg.url && localCfg.anonKey) {
@@ -527,6 +537,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // 4. Tab Focus & Background Polling to guarantee fresh sync on mobile or background devices
+    const onWindowFocus = () => {
+      if (isMounted) {
+        forceCloudSync();
+      }
+    };
+
+    window.addEventListener("focus", onWindowFocus);
+    document.addEventListener("visibilitychange", onWindowFocus);
+    const syncInterval = setInterval(() => {
+      if (isMounted) {
+        forceCloudSync();
+      }
+    }, 15000);
+
     return () => {
       isMounted = false;
       unsubAssets();
@@ -535,8 +560,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubConsumables();
       unsubActivities();
       unsubSystemConfig();
+      if (supaRealtimeSub) supaRealtimeSub.unsubscribe();
+      window.removeEventListener("focus", onWindowFocus);
+      document.removeEventListener("visibilitychange", onWindowFocus);
+      clearInterval(syncInterval);
     };
-  }, []);
+  }, [forceCloudSync]);
 
   // Initial Supabase health test on mount
   useEffect(() => {
@@ -583,7 +612,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updated = { ...currentUser, ...userData };
       setCurrentUser(updated);
       setUsers((prev) => prev.map((u) => u.id === currentUser.id ? updated : u));
-      saveDocument("users", updated);
+      persistSave("users", updated);
       showToast("Perfil Atualizado", "Suas informações foram salvas com sucesso.", "success");
     }
   };
@@ -596,7 +625,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id,
     };
     setUsers((prev) => [...prev, newUser]);
-    saveDocument("users", newUser);
+    persistSave("users", newUser);
     
     // Add activity
     const newActivity: Activity = {
@@ -611,7 +640,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       category: "Governança",
     };
     setActivities((prev) => [newActivity, ...prev]);
-    saveDocument("activities", newActivity);
+    persistSave("activities", newActivity);
     showToast("Usuário Cadastrado", `${userData.name} foi adicionado com sucesso.`, "success");
   };
 
@@ -624,7 +653,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (currentUser && currentUser.id === id) {
             setCurrentUser(updated);
           }
-          saveDocument("users", updated);
+          persistSave("users", updated);
           return updated;
         }
         return u;
@@ -665,12 +694,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ],
         };
         setAssets((prev) => prev.map((a) => a.id === asset.id ? updatedAsset : a));
-        saveDocument("assets", updatedAsset);
+        persistSave("assets", updatedAsset);
       });
     }
 
     setUsers((prev) => prev.filter((u) => u.id !== id));
-    deleteDocument("users", id);
+    persistDelete("users", id);
     
     // Add activity
     const newActivity: Activity = {
@@ -685,7 +714,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       category: "Governança",
     };
     setActivities((prev) => [newActivity, ...prev]);
-    saveDocument("activities", newActivity);
+    persistSave("activities", newActivity);
     showToast(
       "Usuário Removido", 
       `${userToDelete.name} foi excluído do sistema${userAssets.length > 0 ? ` e ${userAssets.length} ativo(s) retornaram ao estoque.` : "."}`, 
@@ -722,7 +751,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             assignedToUser: userObj,
             history: [newEvent, ...(a.history || [])],
           };
-          saveDocument("assets", updatedAsset);
+          persistSave("assets", updatedAsset);
           return updatedAsset;
         }
         return a;
@@ -742,7 +771,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       category: "Notebooks",
     };
     setActivities((prev) => [newActivity, ...prev]);
-    saveDocument("activities", newActivity);
+    persistSave("activities", newActivity);
     showToast("Saída Confirmada", `${userObj.name} recebeu o ativo com sucesso.`, "success");
   };
 
@@ -778,7 +807,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             health: condition === "good" ? 95 : condition === "damaged" ? 40 : 65,
             history: [newEvent, ...(a.history || [])],
           };
-          saveDocument("assets", updatedAsset);
+          persistSave("assets", updatedAsset);
           return updatedAsset;
         }
         return a;
@@ -797,7 +826,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       category: "Inventário",
     };
     setActivities((prev) => [newActivity, ...prev]);
-    saveDocument("activities", newActivity);
+    persistSave("activities", newActivity);
     showToast("Check-in Concluído", "Ativo retornado ao estoque com sucesso.", "success");
   };
 
@@ -819,7 +848,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             health: Math.min(100, (a.health || 80) + 5),
             history: [newEvent, ...(a.history || [])],
           };
-          saveDocument("assets", updatedAsset);
+          persistSave("assets", updatedAsset);
           return updatedAsset;
         }
         return a;
@@ -855,7 +884,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             quantityRemaining: remaining,
             status,
           };
-          saveDocument("consumables", updatedConsumable);
+          persistSave("consumables", updatedConsumable);
           return updatedConsumable;
         }
         return c;
@@ -874,7 +903,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       category: "Consumíveis",
     };
     setActivities((prev) => [newActivity, ...prev]);
-    saveDocument("activities", newActivity);
+    persistSave("activities", newActivity);
 
     if (triggeredCritical) {
       showToast("Estoque Crítico", `Atenção: Estoque de ${name} está quase esgotado!`, "warning");
@@ -899,7 +928,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setConsumables((prev) => [...prev, newItem]);
-    saveDocument("consumables", newItem);
+    persistSave("consumables", newItem);
     showToast("Item Cadastrado", `${consumable.name} adicionado ao estoque.`, "success");
   };
 
@@ -911,7 +940,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id,
     };
     setLicenses((prev) => [newItem, ...prev]);
-    saveDocument("licenses", newItem);
+    persistSave("licenses", newItem);
     showToast("Licença Registrada", `${license.name} foi cadastrada com sucesso.`, "success");
   };
 
@@ -943,7 +972,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setAssets((prev) => [newItem, ...prev]);
-    saveDocument("assets", newItem);
+    persistSave("assets", newItem);
     showToast("Ativo Cadastrado", `${asset.name} foi catalogado e registrado com sucesso.`, "success");
   };
 
@@ -971,7 +1000,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             history: [editEvent, ...(a.history || [])],
           };
 
-          saveDocument("assets", updated);
+          persistSave("assets", updated);
           return updated;
         }
         return a;
@@ -992,7 +1021,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       category: "Inventário",
     };
     setActivities((prev) => [newActivity, ...prev]);
-    saveDocument("activities", newActivity);
+    persistSave("activities", newActivity);
 
     showToast("Ativo Atualizado", `As alterações no ativo foram salvas com sucesso.`, "success");
   };
@@ -1003,7 +1032,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!assetToDelete) return;
 
     setAssets((prev) => prev.filter((a) => a.id !== id));
-    deleteDocument("assets", id);
+    persistDelete("assets", id);
 
     const newActivity: Activity = {
       id: Date.now().toString(),
@@ -1016,7 +1045,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       category: "Inventário",
     };
     setActivities((prev) => [newActivity, ...prev]);
-    saveDocument("activities", newActivity);
+    persistSave("activities", newActivity);
 
     showToast("Ativo Removido", `${assetToDelete.name} foi removido do inventário.`, "success");
   };
