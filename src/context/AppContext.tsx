@@ -459,6 +459,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  // Initial Supabase health test on mount
+  useEffect(() => {
+    if (supabaseConfig.url && supabaseConfig.anonKey) {
+      testSupabaseConnection().catch(() => {});
+    }
+  }, [supabaseConfig.url, supabaseConfig.anonKey, testSupabaseConnection]);
+
   const showToast = (title: string, message: string, type: "success" | "info" | "warning" = "success") => {
     const id = Date.now().toString();
     setToast({ id, title, message, type, visible: true });
