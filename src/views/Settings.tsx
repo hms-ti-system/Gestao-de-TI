@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { 
   Database, 
@@ -68,6 +68,12 @@ export const Settings: React.FC = () => {
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationResult, setMigrationResult] = useState<any>(null);
   const [copiedSql, setCopiedSql] = useState(false);
+
+  // Sync inputs when cloud config is fetched or updated
+  useEffect(() => {
+    if (supabaseConfig.url) setSupaUrl(supabaseConfig.url);
+    if (supabaseConfig.anonKey) setSupaKey(supabaseConfig.anonKey);
+  }, [supabaseConfig.url, supabaseConfig.anonKey]);
 
   // Maintenance state
   const [showClearConfirm, setShowClearConfirm] = useState<"items" | "activities" | "all" | null>(null);

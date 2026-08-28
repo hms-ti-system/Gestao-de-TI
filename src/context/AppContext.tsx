@@ -8,6 +8,9 @@ import {
   clearSpecificCollections,
   subscribeToCollection,
   testFirestoreConnection,
+  saveSystemDbConfigToFirestore,
+  loadSystemDbConfigFromFirestore,
+  subscribeToSystemDbConfig,
   firebaseConfig
 } from "../firebase";
 import {
@@ -221,13 +224,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSupabaseInfo(prev => ({
       ...prev,
       url: cfg.url,
-      status: cfg.url && cfg.anonKey ? "connected" : "disconnected",
+      status: cfg.url && cfg.anonKey ? "syncing" : "disconnected",
     }));
+
+    // Persist to Cloud Firestore so all other devices and browsers immediately receive this config
+    saveSystemDbConfigToFirestore({
+      supabaseUrl: cfg.url.trim(),
+      supabaseAnonKey: cfg.anonKey.trim(),
+    }).catch((err) => {
+      console.warn("Could not push supabase config to cloud:", err);
+    });
+
+    if (cfg.url && cfg.anonKey) {
+      runTestSupabase().then((res) => {
+        setSupabaseInfo(prev => ({
+          ...prev,
+          status: res.success ? "connected" : "error",
+          latencyMs: res.latencyMs,
+          lastTestResult: res,
+        }));
+      }).catch(() => {});
+    }
   }, []);
 
   const setDbProvider = useCallback((prov: "firebase" | "supabase") => {
     setActiveDbProvider(prov);
     setDbProviderState(prov);
+
+    // Persist active provider choice to Cloud Firestore for multi-device sync
+    saveSystemDbConfigToFirestore({
+      activeProvider: prov,
+    }).catch(() => {});
   }, []);
 
   const testSupabaseConnection = useCallback(async () => {
@@ -449,6 +476,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // Subscribe to system database configuration in Firestore (syncs Supabase URL, key, and provider across all devices)
+    const unsubSystemConfig = subscribeToSystemDbConfig((cloudDbCfg) => {
+      if (!isMounted) return;
+      if (cloudDbCfg) {
+        if (cloudDbCfg.supabaseUrl && cloudDbCfg.supabaseAnonKey) {
+          const currentLocal = getSavedSupabaseConfig();
+          if (currentLocal.url !== cloudDbCfg.supabaseUrl || currentLocal.anonKey !== cloudDbCfg.supabaseAnonKey) {
+            saveSupabaseConfig({
+              url: cloudDbCfg.supabaseUrl,
+              anonKey: cloudDbCfg.supabaseAnonKey
+            });
+            setSupabaseConfigState({
+              url: cloudDbCfg.supabaseUrl,
+              anonKey: cloudDbCfg.supabaseAnonKey
+            });
+            setSupabaseInfo(prev => ({
+              ...prev,
+              url: cloudDbCfg.supabaseUrl || "",
+              status: "syncing"
+            }));
+            runTestSupabase().then((res) => {
+              if (isMounted) {
+                setSupabaseInfo(prev => ({
+                  ...prev,
+                  status: res.success ? "connected" : "error",
+                  latencyMs: res.latencyMs,
+                  lastTestResult: res
+                }));
+              }
+            }).catch(() => {});
+          }
+        }
+
+        if (cloudDbCfg.activeProvider) {
+          setActiveDbProvider(cloudDbCfg.activeProvider);
+          setDbProviderState(cloudDbCfg.activeProvider);
+        }
+      } else {
+        // If Firestore has no settings yet, but this device has local Supabase credentials, push to Firestore
+        const localCfg = getSavedSupabaseConfig();
+        const localProv = getActiveDbProvider();
+        if (localCfg.url && localCfg.anonKey) {
+          saveSystemDbConfigToFirestore({
+            supabaseUrl: localCfg.url,
+            supabaseAnonKey: localCfg.anonKey,
+            activeProvider: localProv
+          }).catch(() => {});
+        }
+      }
+    });
+
     return () => {
       isMounted = false;
       unsubAssets();
@@ -456,6 +534,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubLicenses();
       unsubConsumables();
       unsubActivities();
+      unsubSystemConfig();
     };
   }, []);
 

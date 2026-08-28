@@ -247,16 +247,60 @@ export async function loadDatabaseFromFirestore(
   }
 }
 
-// Deprecated alias for backwards compatibility
-export const initializeDbIfEmpty = async (
-  initialUsers: any[],
-  _initialAssets: any[],
-  _initialLicenses: any[],
-  _initialConsumables: any[],
-  _initialActivities: any[]
-) => {
-  return loadDatabaseFromFirestore(initialUsers);
-};
+// Save system configuration (Supabase URL, Anon Key, Active provider) to Firestore
+export interface SystemDbConfig {
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+  activeProvider?: "firebase" | "supabase";
+  updatedAt?: string;
+}
+
+export async function saveSystemDbConfigToFirestore(cfg: SystemDbConfig): Promise<boolean> {
+  try {
+    const docRef = doc(db, "system_config", "database_settings");
+    const clean = sanitizeForFirestore({
+      ...cfg,
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(docRef, clean, { merge: true });
+    console.log("[Firestore] Configurações de banco de dados salvas em nuvem no Firestore.");
+    return true;
+  } catch (err) {
+    console.error("Error saving database settings to Firestore:", err);
+    return false;
+  }
+}
+
+export async function loadSystemDbConfigFromFirestore(): Promise<SystemDbConfig | null> {
+  try {
+    const docRef = doc(db, "system_config", "database_settings");
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data() as SystemDbConfig;
+    }
+    return null;
+  } catch (err) {
+    console.error("Error loading database settings from Firestore:", err);
+    return null;
+  }
+}
+
+export function subscribeToSystemDbConfig(callback: (cfg: SystemDbConfig | null) => void): Unsubscribe {
+  const docRef = doc(db, "system_config", "database_settings");
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (snap.exists()) {
+        callback(snap.data() as SystemDbConfig);
+      } else {
+        callback(null);
+      }
+    },
+    (err) => {
+      console.warn("Error listening to system database settings:", err);
+    }
+  );
+}
 
 // Function to delete specific collections from Firestore
 export async function clearSpecificCollections(colNames: string[]): Promise<void> {
