@@ -12,13 +12,14 @@ import {
   Zap,
   ShieldCheck,
   Percent,
-  Search
+  Search,
+  ShieldAlert
 } from "lucide-react";
 import { motion } from "motion/react";
 import { License } from "../types";
 
 export const Licenses: React.FC = () => {
-  const { licenses, addLicense, showToast } = useApp();
+  const { licenses, addLicense, showToast, isReadOnly, canCreate } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState("");
   const [revealKeyId, setRevealKeyId] = useState<string | null>(null);
@@ -145,6 +146,26 @@ export const Licenses: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Read-Only Notice Banner */}
+      {isReadOnly && (
+        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-amber-900">Perfil de Visualização Ativo (Somente Leitura)</p>
+              <p className="text-amber-700 mt-0.5 leading-relaxed">
+                Você possui permissão exclusivamente para consultar contratos, chaves de ativação e exportar relatórios. O cadastro e edição de novas licenças estão restritos.
+              </p>
+            </div>
+          </div>
+          <span className="hidden sm:inline-block px-2.5 py-1 bg-amber-200/70 text-amber-900 font-bold uppercase text-[10px] rounded-md tracking-wider shrink-0">
+            Apenas Consulta
+          </span>
+        </div>
+      )}
+
       {/* View Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
@@ -159,13 +180,15 @@ export const Licenses: React.FC = () => {
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             <span>Exportar CSV</span>
           </button>
-          <button 
-            onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/10 active:scale-[0.98]"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nova Licença</span>
-          </button>
+          {canCreate && (
+            <button 
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/10 active:scale-[0.98]"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nova Licença</span>
+            </button>
+          )}
         </div>
       </div>
 

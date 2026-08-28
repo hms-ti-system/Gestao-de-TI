@@ -16,7 +16,8 @@ import {
   Building,
   MapPin,
   ClipboardList,
-  ZoomIn
+  ZoomIn,
+  ShieldAlert
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Asset, User } from "../types";
@@ -38,7 +39,11 @@ export const Assets: React.FC<AssetsProps> = ({
     addAsset, 
     checkoutAsset, 
     checkinAsset, 
-    showToast 
+    showToast,
+    isReadOnly,
+    canCreate,
+    canEdit,
+    canDelete
   } = useApp();
 
   const [search, setSearch] = useState("");
@@ -422,6 +427,26 @@ export const Assets: React.FC<AssetsProps> = ({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Read-Only Notice Banner */}
+      {isReadOnly && (
+        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-amber-900">Perfil de Visualização Ativo (Somente Leitura)</p>
+              <p className="text-amber-700 mt-0.5 leading-relaxed">
+                Você possui permissão exclusivamente para consultar o inventário, auditar especificações e exportar relatórios. A criação, edição, entrega e baixa de ativos estão desativadas.
+              </p>
+            </div>
+          </div>
+          <span className="hidden sm:inline-block px-2.5 py-1 bg-amber-200/70 text-amber-900 font-bold uppercase text-[10px] rounded-md tracking-wider shrink-0">
+            Apenas Consulta
+          </span>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
@@ -436,13 +461,15 @@ export const Assets: React.FC<AssetsProps> = ({
             <Download className="w-4 h-4" />
             <span>Exportar</span>
           </button>
-          <button 
-            onClick={handleOpenAddModal}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/10 active:scale-[0.98]"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo Ativo</span>
-          </button>
+          {canCreate && (
+            <button 
+              onClick={handleOpenAddModal}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/10 active:scale-[0.98]"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo Ativo</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -652,21 +679,23 @@ export const Assets: React.FC<AssetsProps> = ({
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        {asset.status === "Disponível" ? (
-                          <button 
-                            onClick={() => triggerCheckout(asset.id)}
-                            className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded cursor-pointer transition-all uppercase tracking-wide"
-                          >
-                            Entrega
-                          </button>
-                        ) : (
-                          <button 
-                            onClick={() => triggerCheckin(asset.id)}
-                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded cursor-pointer transition-all uppercase tracking-wide border border-slate-200"
-                          >
-                            Devolução
-                          </button>
+                      <div className="flex justify-end items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        {canEdit && (
+                          asset.status === "Disponível" ? (
+                            <button 
+                              onClick={() => triggerCheckout(asset.id)}
+                              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded cursor-pointer transition-all uppercase tracking-wide"
+                            >
+                              Entrega
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={() => triggerCheckin(asset.id)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded cursor-pointer transition-all uppercase tracking-wide border border-slate-200"
+                            >
+                              Devolução
+                            </button>
+                          )
                         )}
                         <button 
                           onClick={() => handleAssetClick(asset.id)}
@@ -675,13 +704,15 @@ export const Assets: React.FC<AssetsProps> = ({
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button 
-                          onClick={() => setEditingAsset(asset)}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-                          title="Editar Ativo"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
+                        {canEdit && (
+                          <button 
+                            onClick={() => setEditingAsset(asset)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+                            title="Editar Ativo"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

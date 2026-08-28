@@ -396,9 +396,21 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ setCurrentView
                   </div>
 
                   <div className="flex justify-between py-1">
-                    <span className="text-slate-500 font-medium">Tipo de Acesso:</span>
-                    <span className="font-semibold text-blue-700">
-                      {currentUser.id === "user-admin" ? "Administrador Master" : "Colaborador"}
+                    <span className="text-slate-500 font-medium">Nível de Permissão:</span>
+                    <span className="font-semibold text-blue-700 flex items-center gap-1.5">
+                      {currentUser.isReadOnly || currentUser.permissionLevel === "viewer" ? (
+                        <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[11px] font-bold">
+                          Visualizador (Somente Leitura)
+                        </span>
+                      ) : currentUser.isAdmin || currentUser.permissionLevel === "admin" || currentUser.id === "user-admin" ? (
+                        <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-[11px] font-bold">
+                          Administrador Total
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px] font-bold">
+                          Técnico / Operador
+                        </span>
+                      )}
                     </span>
                   </div>
                 </div>

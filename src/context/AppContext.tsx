@@ -82,6 +82,10 @@ interface AppContextType {
   testSupabaseConnection: () => Promise<any>;
   migrateToSupabase: () => Promise<{ success: boolean; message: string; transferred?: any }>;
   supabaseSqlSchema: string;
+  isReadOnly: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
   login: (identifier: string, password?: string) => boolean;
   logout: () => void;
   updateUserProfile: (userData: Partial<User>) => void;
@@ -118,6 +122,8 @@ const initialUsers: User[] = [
     department: "Design & Inovação",
     location: "Sede Nova York - 12º Andar",
     avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCaEVl7ZYpdPvU_yqwhu2nz1E1pHIwIvTaJu6jX5ZfguzaM5bBinsTchavTA-kNXVzg1XJkH0sEJ5wU0n6_4JUqmTf8ZlzvGZxbaWHxrdhvyauoGl3hHNtxJK6geTv6ETDpuWVJ751pdtMhOtY_Z6voV3XE9dSmeqJSipYMWwpGmj59HEPRzRz5nJd3OlEpRW0TbFBbBnp9MsQbJV2p2ifNg2_NER09Q2RODT5m4UcxkuhWTrvJe9LzbKFlHGQqKiDB0Y68Y3d_x7k",
+    permissionLevel: "standard",
+    isReadOnly: false,
   },
   {
     id: "user-2",
@@ -127,6 +133,8 @@ const initialUsers: User[] = [
     department: "Infraestrutura",
     location: "Sede São Paulo - 4º Andar",
     avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCOGQiMbBQnZlxDCbewZLnAsVeWA7buow4Jb9qIkIzT7HSfR66mvCWU3Oti_snkf90bSx5u8beUkXZaORAPrJWibl--03ftX9A3nMtTtAIGp1UB5nF03O_L7p6RoMCKDG7B7pJaCF-6aN6DbP2i4U3CTL9hOYAAGPZc-7YflzPdKakgVf4NbJ8-kyOabAnkSpVWt5thGQayZNCw4qK10gOd0qPmb38Q8Twei7q_ivYCIbnFHnqQSAIizxoauQfnwIjyIqVdlnKEIr0",
+    permissionLevel: "standard",
+    isReadOnly: false,
   },
   {
     id: "user-3",
@@ -136,6 +144,22 @@ const initialUsers: User[] = [
     department: "Produto",
     location: "Sede Principal",
     avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuBIPbFrB9pdZW6k_JE52kQw8DtTZXW37vYounYCsA1_D1mXFeE6mHwwtvvkN21VtQ0E2sD36CUxBvbDu6baPfCsG8teOU7_htO4yjqxRQcQh6G1_iwE1iAB9B-_BX0KDTFHFPh-zZ8-aEI-twJHk6_7Vt2GiS_Glo6ShD72GEl6Weq-KHaNmcH7EBHdnkqoGRJOo9UbqcoNV3pitKJcWYli9hncg0E6TShtZPqXyJDJ3HTS5KfW7iQszDdZxb_Na6fFo23Z4rVTx5o",
+    permissionLevel: "standard",
+    isReadOnly: false,
+  },
+  {
+    id: "user-viewer",
+    name: "Mariana Costa",
+    email: "auditor@assetcentral.com",
+    username: "visualizador",
+    password: "visualizador",
+    role: "Auditora de TI / Apenas Leitura",
+    department: "Auditoria & Compliance",
+    location: "Sede Principal (HQ)",
+    avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
+    isAdmin: false,
+    isReadOnly: true,
+    permissionLevel: "viewer",
   },
   {
     id: "user-admin",
@@ -148,6 +172,8 @@ const initialUsers: User[] = [
     location: "Sede Principal (HQ)",
     avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCUgS7fDbdjDDbHbn2iIu7i2JpVr8ZV57e7bMCZxI0oW4wvOe1EtGhDwQwGGtmzcXglqhyhWrbNp8MAEWZD4RGKx-DbHh-MUwv_Kh5iLshA6iGla5fFX50Ja_C_UXv7M8tVMmahFmBWAxaFGhE66FPaJSfCOH7R5QGcZDojaRxniHoQAESB2vnzVrW8FluC97ObSf7q3l53iq1ZGa2ZAjL-obKpeDYM1_Uy1lP6Xb2Ba1806vNp00naBpvXJtyhyeXo4Mo-IygrbiU",
     isAdmin: true,
+    isReadOnly: false,
+    permissionLevel: "admin",
   },
 ];
 
@@ -167,8 +193,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem("ac_users");
-    return saved ? JSON.parse(saved) : initialUsers;
+    if (saved) {
+      try {
+        const parsed: User[] = JSON.parse(saved);
+        // Ensure user-viewer exists in list
+        if (!parsed.some((u) => u.id === "user-viewer" || u.username === "visualizador" || u.email === "auditor@assetcentral.com")) {
+          const viewerUser = initialUsers.find((u) => u.id === "user-viewer")!;
+          return [...parsed, viewerUser];
+        }
+        return parsed;
+      } catch {
+        return initialUsers;
+      }
+    }
+    return initialUsers;
   });
+
+  const isReadOnly = Boolean(currentUser?.isReadOnly || currentUser?.permissionLevel === "viewer");
+  const canCreate = !isReadOnly;
+  const canEdit = !isReadOnly;
+  const canDelete = !isReadOnly && Boolean(currentUser?.isAdmin || currentUser?.id === "user-admin");
 
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem("ac_assets");
@@ -443,6 +487,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add User
   const addUser = (userData: Omit<User, "id">) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Criação de usuários não permitida.", "warning");
+      return;
+    }
     const id = "user-" + Math.floor(Math.random() * 9000 + 1000);
     const newUser: User = {
       ...userData,
@@ -470,6 +518,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Update User
   const updateUser = (id: string, updatedData: Partial<User>) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Edição de usuários não permitida.", "warning");
+      return;
+    }
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === id) {
@@ -488,6 +540,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Delete User
   const deleteUser = (id: string) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Exclusão não permitida.", "warning");
+      return;
+    }
     const userToDelete = users.find((u) => u.id === id);
     if (!userToDelete) return;
 
@@ -555,6 +611,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     returnDate?: string,
     notes?: string
   ) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Check-out de ativos não permitido.", "warning");
+      return;
+    }
     const userObj = users.find((u) => u.id === userId) || users[0];
     
     setAssets((prev) =>
@@ -607,6 +667,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     location: string,
     notes: string
   ) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Check-in de ativos não permitido.", "warning");
+      return;
+    }
     const prevAsset = assets.find((a) => a.id === assetId);
     const prevUser = prevAsset?.assignedToUser;
 
@@ -656,6 +720,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Run Diagnostics
   const runDiagnostics = (assetId: string) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização.", "warning");
+      return;
+    }
     setAssets((prev) =>
       prev.map((a) => {
         if (a.id === assetId) {
@@ -683,6 +751,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Checkout Consumable
   const checkoutConsumable = (id: string) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Retirada de itens não permitida.", "warning");
+      return;
+    }
     let triggeredCritical = false;
     let name = "";
 
@@ -738,6 +810,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add Consumable
   const addConsumable = (consumable: Omit<Consumable, "id" | "status">) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Criação de consumíveis não permitida.", "warning");
+      return;
+    }
     const id = "C-" + (consumables.length + 1);
     const ratio = consumable.quantityRemaining / consumable.quantityTotal;
     let status: Consumable["status"] = "Disponível";
@@ -758,6 +834,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add License
   const addLicense = (license: Omit<License, "id">) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Cadastro de licenças não permitido.", "warning");
+      return;
+    }
     const id = "LIC-" + (2024 + licenses.length).toString() + "-" + Math.floor(Math.random() * 900 + 100);
     const newItem: License = {
       ...license,
@@ -770,6 +850,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add Asset
   const addAsset = (asset: Omit<Asset, "id" | "health">) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização (sem permissão de CREATE, UPDATE ou DELETE).", "warning");
+      return;
+    }
     const id = "ASSET-" + Math.floor(Math.random() * 9000 + 1000);
     const now = new Date();
     const nowIso = now.toISOString();
@@ -802,6 +886,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Update Asset
   const updateAsset = (id: string, updatedData: Partial<Asset>) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização (sem permissão de CREATE, UPDATE ou DELETE).", "warning");
+      return;
+    }
     const now = new Date();
     const formattedDate = now.toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" });
     const formattedTime = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -852,6 +940,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Delete Asset
   const deleteAsset = (id: string) => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização (sem permissão de CREATE, UPDATE ou DELETE).", "warning");
+      return;
+    }
     const assetToDelete = assets.find((a) => a.id === id);
     if (!assetToDelete) return;
 
@@ -875,6 +967,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetDatabase = async () => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Apenas administradores podem redefinir o banco de dados.", "warning");
+      return;
+    }
     const adminUser = {
       id: "user-admin",
       name: "Admin Global",
@@ -916,6 +1012,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearItemTables = async () => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Apenas administradores podem limpar as tabelas.", "warning");
+      return;
+    }
     try {
       await clearSupabaseTables(["assets", "licenses", "consumables", "activities"]);
       setAssets([]);
@@ -934,6 +1034,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearAllActivities = async () => {
+    if (isReadOnly) {
+      showToast("Acesso Restrito", "Apenas administradores podem apagar o histórico de atividades.", "warning");
+      return;
+    }
     try {
       await clearSupabaseTables(["activities"]);
       setActivities([]);
@@ -964,6 +1068,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         testSupabaseConnection,
         migrateToSupabase,
         supabaseSqlSchema: SUPABASE_SQL_SCHEMA,
+        isReadOnly,
+        canCreate,
+        canEdit,
+        canDelete,
         login,
         logout,
         updateUserProfile,

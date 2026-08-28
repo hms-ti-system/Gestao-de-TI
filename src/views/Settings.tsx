@@ -16,7 +16,9 @@ import {
   Copy,
   Check,
   Zap,
-  RefreshCw
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck
 } from "lucide-react";
 
 export const Settings: React.FC = () => {
@@ -37,7 +39,10 @@ export const Settings: React.FC = () => {
     assets,
     licenses,
     consumables,
-    activities
+    activities,
+    isReadOnly,
+    canDelete,
+    canEdit
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<"supabase_config" | "maintenance">("supabase_config");
@@ -158,6 +163,26 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Read-Only Notice Banner */}
+      {isReadOnly && (
+        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-amber-900">Perfil de Visualização Ativo (Somente Leitura)</p>
+              <p className="text-amber-700 mt-0.5 leading-relaxed">
+                Você está autenticado com permissões de consulta. Modificações de conexão, gravação de dados e rotinas de manutenção ou exclusão no Supabase estão desabilitadas.
+              </p>
+            </div>
+          </div>
+          <span className="hidden sm:inline-block px-2.5 py-1 bg-amber-200/70 text-amber-900 font-bold uppercase text-[10px] rounded-md tracking-wider shrink-0">
+            Modo Consulta
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

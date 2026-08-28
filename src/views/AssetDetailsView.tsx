@@ -44,7 +44,17 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
   setCurrentView,
   setSelectedAssetId
 }) => {
-  const { assets, users, runDiagnostics, checkoutAsset, checkinAsset, showToast } = useApp();
+  const { 
+    assets, 
+    users, 
+    runDiagnostics, 
+    checkoutAsset, 
+    checkinAsset, 
+    showToast,
+    isReadOnly,
+    canEdit,
+    canDelete 
+  } = useApp();
   const [runningDiag, setRunningDiag] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -259,31 +269,40 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
 
         {/* Header Actions */}
         <div className="flex items-center gap-2 shrink-0">
-          <button 
-            onClick={() => setShowEditModal(true)}
-            className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-2 shadow-xs"
-            title="Editar informações do ativo"
-          >
-            <Pencil className="w-4 h-4 text-blue-600" />
-            <span>Editar Ativo</span>
-          </button>
+          {canEdit ? (
+            <>
+              <button 
+                onClick={() => setShowEditModal(true)}
+                className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-2 shadow-xs"
+                title="Editar informações do ativo"
+              >
+                <Pencil className="w-4 h-4 text-blue-600" />
+                <span>Editar Ativo</span>
+              </button>
 
-          {asset.status === "Disponível" ? (
-            <button 
-              onClick={() => setShowCheckoutModal(true)}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-2 shadow-sm"
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>Entregar Ativo</span>
-            </button>
+              {asset.status === "Disponível" ? (
+                <button 
+                  onClick={() => setShowCheckoutModal(true)}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-2 shadow-sm"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>Entregar Ativo</span>
+                </button>
+              ) : (
+                <button 
+                  onClick={() => setShowCheckinModal(true)}
+                  className="px-5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-2 shadow-xs"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Devolver ao Estoque</span>
+                </button>
+              )}
+            </>
           ) : (
-            <button 
-              onClick={() => setShowCheckinModal(true)}
-              className="px-5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-2 shadow-xs"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span>Devolver ao Estoque</span>
-            </button>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200">
+              <ShieldCheck className="w-4 h-4 text-slate-500" />
+              Modo Leitura
+            </span>
           )}
         </div>
       </div>
@@ -654,13 +673,19 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
 
               <button
                 onClick={handleRunDiagnostic}
-                disabled={runningDiag}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-700 text-white font-bold rounded-lg text-[11px] uppercase tracking-wide transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                disabled={runningDiag || isReadOnly}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-lg text-[11px] uppercase tracking-wide transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:cursor-not-allowed"
+                title={isReadOnly ? "Ação bloqueada no perfil de visualização" : "Executar rotina de diagnóstico"}
               >
                 {runningDiag ? (
                   <>
                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                     <span>Analisando...</span>
+                  </>
+                ) : isReadOnly ? (
+                  <>
+                    <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Diagnóstico em Modo Consulta</span>
                   </>
                 ) : (
                   <>

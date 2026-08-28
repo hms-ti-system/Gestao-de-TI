@@ -1,3 +1,5 @@
+export type UserPermission = "admin" | "standard" | "viewer";
+
 export interface User {
   id: string;
   name: string;
@@ -9,6 +11,8 @@ export interface User {
   location: string;
   avatar: string;
   isAdmin?: boolean;
+  isReadOnly?: boolean;
+  permissionLevel?: UserPermission;
 }
 
 export type AssetStatus = "Disponível" | "Atribuído" | "Manutenção";

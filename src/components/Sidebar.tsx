@@ -28,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen, 
   setMobileOpen 
 }) => {
-  const { currentUser, logout } = useApp();
+  const { currentUser, logout, isReadOnly } = useApp();
 
   const isAdminUser = currentUser?.isAdmin || currentUser?.id === "user-admin";
 
@@ -132,9 +132,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-8 h-8 rounded-full border border-slate-700 object-cover"
               />
               <div className="overflow-hidden flex-1">
-                <p className="text-xs font-semibold text-white truncate group-hover:text-blue-400 transition-colors">
-                  {currentUser.name}
-                </p>
+                <div className="flex items-center justify-between gap-1">
+                  <p className="text-xs font-semibold text-white truncate group-hover:text-blue-400 transition-colors">
+                    {currentUser.name}
+                  </p>
+                  {isReadOnly ? (
+                    <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-300 text-[9px] font-bold rounded uppercase border border-amber-500/30 shrink-0">
+                      Leitura
+                    </span>
+                  ) : isAdminUser ? (
+                    <span className="px-1.5 py-0.2 bg-blue-500/20 text-blue-300 text-[9px] font-bold rounded uppercase border border-blue-500/30 shrink-0">
+                      Admin
+                    </span>
+                  ) : null}
+                </div>
                 <p className="text-[10px] text-slate-400 truncate">
                   {currentUser.email}
                 </p>

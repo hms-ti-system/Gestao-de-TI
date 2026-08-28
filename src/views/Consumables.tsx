@@ -14,13 +14,15 @@ import {
   Boxes,
   HelpCircle,
   TrendingUp,
-  Activity
+  Activity,
+  ShieldAlert,
+  ShieldCheck
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Consumable } from "../types";
 
 export const Consumables: React.FC = () => {
-  const { consumables, checkoutConsumable, addConsumable, showToast } = useApp();
+  const { consumables, checkoutConsumable, addConsumable, showToast, isReadOnly, canCreate, canEdit } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
 
   // Add consumable form state
@@ -70,19 +72,41 @@ export const Consumables: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Read-Only Notice Banner */}
+      {isReadOnly && (
+        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-amber-900">Perfil de Visualização Ativo (Somente Leitura)</p>
+              <p className="text-amber-700 mt-0.5 leading-relaxed">
+                Você possui permissão exclusivamente para consultar os níveis de estoque e estatísticas de consumo. A criação de itens e baixas de estoque (checkout) estão bloqueadas.
+              </p>
+            </div>
+          </div>
+          <span className="hidden sm:inline-block px-2.5 py-1 bg-amber-200/70 text-amber-900 font-bold uppercase text-[10px] rounded-md tracking-wider shrink-0">
+            Apenas Consulta
+          </span>
+        </div>
+      )}
+
       {/* View Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="font-sans text-2xl font-extrabold text-slate-900 tracking-tight leading-none">Consumíveis de TI</h2>
           <p className="text-sm text-slate-400 font-medium mt-1">Monitore e dispense acessórios de escritório e periféricos de rápida substituição.</p>
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/10"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Novo Consumível</span>
-        </button>
+        {canCreate && (
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/10"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Novo Consumível</span>
+          </button>
+        )}
       </div>
 
       {/* Top statistics overview block */}
@@ -188,13 +212,19 @@ export const Consumables: React.FC = () => {
                   </div>
 
                   {/* Checkout trigger */}
-                  <button
-                    onClick={() => checkoutConsumable(item.id)}
-                    disabled={item.quantityRemaining === 0}
-                    className="px-3 py-1 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[10px] font-bold rounded transition-colors uppercase tracking-wider shrink-0 cursor-pointer"
-                  >
-                    Checkout
-                  </button>
+                  {canEdit ? (
+                    <button
+                      onClick={() => checkoutConsumable(item.id)}
+                      disabled={item.quantityRemaining === 0}
+                      className="px-3 py-1 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-[10px] font-bold rounded transition-colors uppercase tracking-wider shrink-0 cursor-pointer"
+                    >
+                      Checkout
+                    </button>
+                  ) : (
+                    <span className="px-2.5 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded uppercase tracking-wider shrink-0 border border-slate-200">
+                      Consulta
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -202,16 +232,18 @@ export const Consumables: React.FC = () => {
         })}
 
         {/* Dash block to Register New Consumable */}
-        <div 
-          onClick={() => setShowAddModal(true)}
-          className="border-2 border-dashed border-slate-200 hover:border-blue-500 hover:bg-blue-50/20 rounded-2xl p-6 transition-all duration-200 flex flex-col items-center justify-center h-[230px] cursor-pointer group"
-        >
-          <div className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center text-slate-400 group-hover:scale-105 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all">
-            <Plus className="w-5 h-5" />
+        {canCreate && (
+          <div 
+            onClick={() => setShowAddModal(true)}
+            className="border-2 border-dashed border-slate-200 hover:border-blue-500 hover:bg-blue-50/20 rounded-2xl p-6 transition-all duration-200 flex flex-col items-center justify-center h-[230px] cursor-pointer group"
+          >
+            <div className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center text-slate-400 group-hover:scale-105 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all">
+              <Plus className="w-5 h-5" />
+            </div>
+            <span className="font-bold text-xs text-slate-500 group-hover:text-blue-600 transition-colors mt-4">Novo Suprimento</span>
+            <p className="text-[10px] text-slate-400 text-center mt-1 leading-normal max-w-[200px]">Adicione suprimentos de TI, adaptadores ou periféricos ao estoque.</p>
           </div>
-          <span className="font-bold text-xs text-slate-500 group-hover:text-blue-600 transition-colors mt-4">Novo Suprimento</span>
-          <p className="text-[10px] text-slate-400 text-center mt-1 leading-normal max-w-[200px]">Adicione suprimentos de TI, adaptadores ou periféricos ao estoque.</p>
-        </div>
+        )}
       </div>
 
       {/* REGISTRATION MODAL */}
