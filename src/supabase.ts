@@ -39,12 +39,12 @@ export function saveSupabaseConfig(config: SupabaseConfig) {
   cachedClient = null;
 }
 
-export function getActiveDbProvider(): "firebase" | "supabase" {
+export function getActiveDbProvider(): "supabase" | "firebase" {
   const saved = localStorage.getItem(LOCAL_STORAGE_KEY_PROVIDER);
   if (saved === "supabase" || saved === "firebase") {
     return saved;
   }
-  return "firebase";
+  return "supabase";
 }
 
 export function setActiveDbProvider(provider: "firebase" | "supabase") {

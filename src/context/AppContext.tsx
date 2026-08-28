@@ -1,18 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { User, Asset, License, Consumable, Activity, TimelineEvent } from "../types";
-import { 
-  loadDatabaseFromFirestore, 
-  saveDocument, 
-  deleteDocument, 
-  clearAllCollectionsAndCreateAdmin, 
-  clearSpecificCollections,
-  subscribeToCollection,
-  testFirestoreConnection,
-  saveSystemDbConfigToFirestore,
-  loadSystemDbConfigFromFirestore,
-  subscribeToSystemDbConfig,
-  firebaseConfig
-} from "../firebase";
+import { firebaseConfig } from "../firebase";
 import {
   getSavedSupabaseConfig,
   saveSupabaseConfig,
@@ -211,7 +199,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [toast, setToast] = useState<Toast | null>(null);
 
-  const [dbProvider, setDbProviderState] = useState<"firebase" | "supabase">(() => getActiveDbProvider());
+  const [dbProvider, setDbProviderState] = useState<"firebase" | "supabase">("supabase");
   const [supabaseConfig, setSupabaseConfigState] = useState<SupabaseConfig>(() => getSavedSupabaseConfig());
   const [supabaseInfo, setSupabaseInfo] = useState<SupabaseConnectionInfo>(() => ({
     status: supabaseConfig.url ? "syncing" : "disconnected",
@@ -228,14 +216,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: cfg.url && cfg.anonKey ? "syncing" : "disconnected",
     }));
 
-    // Persist to Cloud Firestore so all other devices and browsers immediately receive this config
-    saveSystemDbConfigToFirestore({
-      supabaseUrl: cfg.url.trim(),
-      supabaseAnonKey: cfg.anonKey.trim(),
-    }).catch((err) => {
-      console.warn("Could not push supabase config to cloud:", err);
-    });
-
     if (cfg.url && cfg.anonKey) {
       runTestSupabase().then((res) => {
         setSupabaseInfo(prev => ({
@@ -251,11 +231,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setDbProvider = useCallback((prov: "firebase" | "supabase") => {
     setActiveDbProvider(prov);
     setDbProviderState(prov);
-
-    // Persist active provider choice to Cloud Firestore for multi-device sync
-    saveSystemDbConfigToFirestore({
-      activeProvider: prov,
-    }).catch(() => {});
   }, []);
 
   const testSupabaseConnection = useCallback(async () => {
@@ -271,43 +246,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const [cloudInfo, setCloudInfo] = useState<CloudConnectionInfo>({
-    status: "syncing",
+    status: "offline",
     lastSync: null,
-    databaseId: firebaseConfig.firestoreDatabaseId || "(default)",
-    projectId: firebaseConfig.projectId || "gen-lang-client",
+    databaseId: firebaseConfig.firestoreDatabaseId || "(desconectado)",
+    projectId: firebaseConfig.projectId || "desconectado",
     latencyMs: null
   });
 
-  // Dual-persistence helpers
+  // Supabase direct persistence helpers (Firebase disconnected)
   const persistSave = useCallback(async (collectionName: string, item: any) => {
     try {
-      // 1. Save to Firebase Firestore
-      await saveDocument(collectionName, item);
-    } catch (err) {
-      console.warn(`[Firestore Cloud] Falha ao salvar em ${collectionName}:`, err);
-    }
-
-    try {
-      // 2. Mirror save to Supabase (if configured)
+      // Save directly to Supabase
       await saveDocumentToSupabase(collectionName, item);
     } catch (err) {
-      console.warn(`[Supabase Cloud] Falha ao espelhar em ${collectionName}:`, err);
+      console.warn(`[Supabase Cloud] Falha ao salvar em ${collectionName}:`, err);
     }
   }, []);
 
   const persistDelete = useCallback(async (collectionName: string, id: string) => {
     try {
-      // 1. Delete from Firebase Firestore
-      await deleteDocument(collectionName, id);
-    } catch (err) {
-      console.warn(`[Firestore Cloud] Falha ao excluir ${collectionName}/${id}:`, err);
-    }
-
-    try {
-      // 2. Mirror delete from Supabase (if configured)
+      // Delete directly from Supabase
       await deleteDocumentFromSupabase(collectionName, id);
     } catch (err) {
-      console.warn(`[Supabase Cloud] Falha ao espelhar exclusão ${collectionName}/${id}:`, err);
+      console.warn(`[Supabase Cloud] Falha ao excluir ${collectionName}/${id}:`, err);
     }
   }, []);
 
@@ -337,48 +298,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [activities]);
 
   const forceCloudSync = useCallback(async () => {
-    const active = getActiveDbProvider();
-    if (active === "supabase") {
-      setSupabaseInfo(prev => ({ ...prev, status: "syncing" }));
-      try {
-        const data = await loadDatabaseFromSupabase(initialUsers);
-        if (data.users && data.users.length > 0) setUsers(data.users);
-        if (data.assets) setAssets(data.assets);
-        if (data.licenses) setLicenses(data.licenses);
-        if (data.consumables) setConsumables(data.consumables);
-        if (data.activities) setActivities(data.activities);
+    setSupabaseInfo(prev => ({ ...prev, status: "syncing" }));
+    try {
+      const data = await loadDatabaseFromSupabase(initialUsers);
+      if (data.users && data.users.length > 0) setUsers(data.users);
+      if (data.assets) setAssets(data.assets);
+      if (data.licenses) setLicenses(data.licenses);
+      if (data.consumables) setConsumables(data.consumables);
+      if (data.activities) setActivities(data.activities);
 
-        setSupabaseInfo(prev => ({
-          ...prev,
-          status: "connected",
-        }));
-      } catch (err) {
-        console.error("Force Supabase sync failed:", err);
-        setSupabaseInfo(prev => ({ ...prev, status: "error" }));
-      }
-    } else {
-      setCloudInfo(prev => ({ ...prev, status: "syncing" }));
-      try {
-        const data = await loadDatabaseFromFirestore(initialUsers);
-        if (data.users && data.users.length > 0) setUsers(data.users);
-        if (data.assets) setAssets(data.assets);
-        if (data.licenses) setLicenses(data.licenses);
-        if (data.consumables) setConsumables(data.consumables);
-        if (data.activities) setActivities(data.activities);
-
-        setCloudInfo(prev => ({
-          ...prev,
-          status: "connected",
-          lastSync: new Date()
-        }));
-      } catch (err) {
-        console.error("Force cloud sync failed:", err);
-        setCloudInfo(prev => ({ ...prev, status: "error" }));
-      }
+      setSupabaseInfo(prev => ({
+        ...prev,
+        status: "connected",
+      }));
+    } catch (err) {
+      console.error("Force Supabase sync failed:", err);
+      setSupabaseInfo(prev => ({ ...prev, status: "error" }));
     }
   }, []);
 
-  // 1-Click Migration from current local/Firestore data to Supabase
+  // 1-Click Migration from current local/cache data to Supabase
   const migrateToSupabase = useCallback(async () => {
     const dataToMigrate = {
       users,
@@ -397,147 +336,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [users, assets, licenses, consumables, activities, setDbProvider, testSupabaseConnection]);
 
   const testConnection = useCallback(async () => {
-    setCloudInfo(prev => ({ ...prev, status: "syncing" }));
-    const result = await testFirestoreConnection();
-    setCloudInfo(prev => ({
-      ...prev,
-      status: result.success ? "connected" : "error",
-      lastSync: result.success ? new Date() : prev.lastSync,
-      latencyMs: result.latencyMs,
-      lastTestResult: result
-    }));
-    return result;
-  }, []);
+    // Firebase is disconnected, test Supabase instead
+    return await testSupabaseConnection();
+  }, [testSupabaseConnection]);
 
-  // Synchronize with databases on component mount and subscribe to realtime updates
+  // Synchronize with Supabase database on mount and subscribe to postgres realtime updates
   useEffect(() => {
     let isMounted = true;
 
     const initDbSync = async () => {
       try {
-        const activeProv = getActiveDbProvider();
-        if (activeProv === "supabase") {
-          const sData = await loadDatabaseFromSupabase(initialUsers);
-          if (!isMounted) return;
-          if (sData.users && sData.users.length > 0) setUsers(sData.users);
-          if (sData.assets) setAssets(sData.assets);
-          if (sData.licenses) setLicenses(sData.licenses);
-          if (sData.consumables) setConsumables(sData.consumables);
-          if (sData.activities) setActivities(sData.activities);
-        } else {
-          setCloudInfo(prev => ({ ...prev, status: "syncing" }));
-          const data = await loadDatabaseFromFirestore(initialUsers);
-          if (!isMounted) return;
-          if (data.users && data.users.length > 0) setUsers(data.users);
-          if (data.assets) setAssets(data.assets);
-          if (data.licenses) setLicenses(data.licenses);
-          if (data.consumables) setConsumables(data.consumables);
-          if (data.activities) setActivities(data.activities);
-
-          setCloudInfo(prev => ({
-            ...prev,
-            status: "connected",
-            lastSync: new Date()
-          }));
-        }
+        const sData = await loadDatabaseFromSupabase(initialUsers);
+        if (!isMounted) return;
+        if (sData.users && sData.users.length > 0) setUsers(sData.users);
+        if (sData.assets) setAssets(sData.assets);
+        if (sData.licenses) setLicenses(sData.licenses);
+        if (sData.consumables) setConsumables(sData.consumables);
+        if (sData.activities) setActivities(sData.activities);
       } catch (error) {
-        console.error("Failed to sync initial database on mount:", error);
+        console.error("Failed to sync Supabase database on mount:", error);
       }
     };
 
     initDbSync();
 
-    // 1. Subscribe to realtime Firestore changes
-    const unsubAssets = subscribeToCollection<Asset>("assets", (liveAssets) => {
-      if (!isMounted) return;
-      setAssets(liveAssets);
-      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
-    });
-
-    const unsubUsers = subscribeToCollection<User>("users", (liveUsers) => {
-      if (!isMounted) return;
-      if (liveUsers && liveUsers.length > 0) {
-        setUsers(liveUsers);
-      }
-      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
-    });
-
-    const unsubLicenses = subscribeToCollection<License>("licenses", (liveLicenses) => {
-      if (!isMounted) return;
-      setLicenses(liveLicenses);
-      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
-    });
-
-    const unsubConsumables = subscribeToCollection<Consumable>("consumables", (liveConsumables) => {
-      if (!isMounted) return;
-      setConsumables(liveConsumables);
-      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
-    });
-
-    const unsubActivities = subscribeToCollection<Activity>("activities", (liveActivities) => {
-      if (!isMounted) return;
-      setActivities(liveActivities);
-      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
-    });
-
-    // 2. Subscribe to Supabase Postgres Realtime changes
+    // 1. Subscribe to Supabase Postgres Realtime changes
     const supaRealtimeSub = subscribeToSupabaseRealtime((_table) => {
       if (!isMounted) return;
       console.log(`[Supabase Realtime] Mudança detectada na tabela ${_table}, atualizando dados locais...`);
       forceCloudSync();
     });
 
-    // 3. Subscribe to system database configuration in Firestore (syncs credentials across devices)
-    const unsubSystemConfig = subscribeToSystemDbConfig((cloudDbCfg) => {
-      if (!isMounted) return;
-      if (cloudDbCfg) {
-        if (cloudDbCfg.supabaseUrl && cloudDbCfg.supabaseAnonKey) {
-          const currentLocal = getSavedSupabaseConfig();
-          if (currentLocal.url !== cloudDbCfg.supabaseUrl || currentLocal.anonKey !== cloudDbCfg.supabaseAnonKey) {
-            saveSupabaseConfig({
-              url: cloudDbCfg.supabaseUrl,
-              anonKey: cloudDbCfg.supabaseAnonKey
-            });
-            setSupabaseConfigState({
-              url: cloudDbCfg.supabaseUrl,
-              anonKey: cloudDbCfg.supabaseAnonKey
-            });
-            setSupabaseInfo(prev => ({
-              ...prev,
-              url: cloudDbCfg.supabaseUrl || "",
-              status: "syncing"
-            }));
-            runTestSupabase().then((res) => {
-              if (isMounted) {
-                setSupabaseInfo(prev => ({
-                  ...prev,
-                  status: res.success ? "connected" : "error",
-                  latencyMs: res.latencyMs,
-                  lastTestResult: res
-                }));
-              }
-            }).catch(() => {});
-          }
-        }
-
-        if (cloudDbCfg.activeProvider) {
-          setActiveDbProvider(cloudDbCfg.activeProvider);
-          setDbProviderState(cloudDbCfg.activeProvider);
-        }
-      } else {
-        const localCfg = getSavedSupabaseConfig();
-        const localProv = getActiveDbProvider();
-        if (localCfg.url && localCfg.anonKey) {
-          saveSystemDbConfigToFirestore({
-            supabaseUrl: localCfg.url,
-            supabaseAnonKey: localCfg.anonKey,
-            activeProvider: localProv
-          }).catch(() => {});
-        }
-      }
-    });
-
-    // 4. Tab Focus & Background Polling to guarantee fresh sync on mobile or background devices
+    // 2. Tab Focus & Background Polling to guarantee fresh sync on mobile or background devices
     const onWindowFocus = () => {
       if (isMounted) {
         forceCloudSync();
@@ -554,12 +384,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return () => {
       isMounted = false;
-      unsubAssets();
-      unsubUsers();
-      unsubLicenses();
-      unsubConsumables();
-      unsubActivities();
-      unsubSystemConfig();
       if (supaRealtimeSub) supaRealtimeSub.unsubscribe();
       window.removeEventListener("focus", onWindowFocus);
       document.removeEventListener("visibilitychange", onWindowFocus);
@@ -1065,7 +889,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     
     try {
-      await clearAllCollectionsAndCreateAdmin(adminUser);
       await clearSupabaseTables(["users", "assets", "licenses", "consumables", "activities"]);
       await saveDocumentToSupabase("users", adminUser);
       
@@ -1085,16 +908,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem("ac_consumables", JSON.stringify([]));
       localStorage.setItem("ac_activities", JSON.stringify([]));
       
-      showToast("Banco de Dados Zerado", "Todo o banco de dados foi resetado. Usuário master 'admin' criado com senha 'admin'.", "success");
+      showToast("Banco de Dados Zerado", "Todo o banco de dados foi resetado no Supabase. Usuário master 'admin' criado com senha 'admin'.", "success");
     } catch (err) {
       console.error("Failed to reset database:", err);
-      showToast("Erro ao Zerar", "Houve uma falha ao comunicar com a base de dados.", "warning");
+      showToast("Erro ao Zerar", "Houve uma falha ao comunicar com o Supabase.", "warning");
     }
   };
 
   const clearItemTables = async () => {
     try {
-      await clearSpecificCollections(["assets", "licenses", "consumables", "activities"]);
       await clearSupabaseTables(["assets", "licenses", "consumables", "activities"]);
       setAssets([]);
       setLicenses([]);
@@ -1104,23 +926,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem("ac_licenses", JSON.stringify([]));
       localStorage.setItem("ac_consumables", JSON.stringify([]));
       localStorage.setItem("ac_activities", JSON.stringify([]));
-      showToast("Tabelas Limpas", "Os dados de Ativos, Consumíveis, Licenças e Históricos de Atividades foram zerados com sucesso.", "success");
+      showToast("Tabelas Limpas", "Os dados de Ativos, Consumíveis, Licenças e Históricos de Atividades foram zerados no Supabase.", "success");
     } catch (err) {
       console.error("Failed to clear tables:", err);
-      showToast("Erro ao Limpar", "Houve uma falha ao comunicar com a base de dados.", "warning");
+      showToast("Erro ao Limpar", "Houve uma falha ao comunicar com o Supabase.", "warning");
     }
   };
 
   const clearAllActivities = async () => {
     try {
-      await clearSpecificCollections(["activities"]);
       await clearSupabaseTables(["activities"]);
       setActivities([]);
       localStorage.setItem("ac_activities", JSON.stringify([]));
-      showToast("Histórico Limpo", "Todo o histórico de atividades foi apagado com sucesso.", "success");
+      showToast("Histórico Limpo", "Todo o histórico de atividades foi apagado com sucesso no Supabase.", "success");
     } catch (err) {
       console.error("Failed to clear activities:", err);
-      showToast("Erro ao Limpar", "Houve uma falha ao apagar o histórico de atividades.", "warning");
+      showToast("Erro ao Limpar", "Houve uma falha ao apagar o histórico de atividades no Supabase.", "warning");
     }
   };
 
