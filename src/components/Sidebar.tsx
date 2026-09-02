@@ -12,7 +12,7 @@ import {
   Boxes,
   Menu,
   X,
-  FileSpreadsheet,
+  Flame,
   Users as UsersIcon
 } from "lucide-react";
 
@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "assets", label: "Ativos", icon: Laptop },
     { id: "consumables", label: "Consumíveis", icon: Package },
     { id: "licenses", label: "Licenças", icon: KeyRound },
-    { id: "sheets", label: "Google Planilhas", icon: FileSpreadsheet },
+    { id: "firebase", label: "Conexão Firebase", icon: Flame },
     ...(isAdminUser ? [{ id: "users", label: "Usuários", icon: UsersIcon }] : []),
     { id: "profile", label: "Perfil", icon: User },
   ];

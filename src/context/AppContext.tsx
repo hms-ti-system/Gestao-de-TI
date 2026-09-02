@@ -1,20 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { User, Asset, License, Consumable, Activity, TimelineEvent } from "../types";
-import { firebaseConfig } from "../firebase";
-import { getStoredAccessToken } from "../services/googleAuth";
 import { 
-  fetchCompleteDatabaseFromSheets, 
-  pushCompleteDatabaseToSheets, 
-  testGoogleSheetsApiHandshake,
-  deleteGoogleDriveSpreadsheet,
-  clearStoredSheetsDatabase,
-  HandshakeResult 
-} from "../services/googleSheets";
+  firebaseConfig,
+  saveDocument as saveDocumentToFirestore,
+  deleteDocument as deleteDocumentFromFirestore,
+  loadDatabaseFromFirestore,
+  subscribeToCollection,
+  testFirestoreConnection,
+  migrateDataToFirebase,
+  clearSpecificCollections,
+  clearAllCollectionsAndCreateAdmin
+} from "../firebase";
 import {
   getSavedSupabaseConfig,
   saveSupabaseConfig,
   getActiveDbProvider,
   setActiveDbProvider,
+  deleteAndClearSupabaseConfig,
   SUPABASE_SQL_SCHEMA,
   SUPABASE_RECREATE_DATABASE_SQL,
   recreateSupabaseDatabase,
@@ -34,39 +36,6 @@ interface Toast {
   message: string;
   type: "success" | "info" | "warning";
   visible: boolean;
-}
-
-export interface SheetsSyncLogEntry {
-  id: string;
-  timestamp: string; // ISO string
-  type: "pull" | "push" | "handshake" | "auto_sync";
-  status: "success" | "error" | "warning";
-  actionName: string;
-  message: string;
-  details?: string;
-  durationMs?: number;
-  statusCode?: number;
-  endpointTested?: string;
-  itemCounts?: {
-    assets?: number;
-    licenses?: number;
-    consumables?: number;
-    users?: number;
-    activities?: number;
-  };
-  errorDetails?: string;
-}
-
-export interface SheetsSyncState {
-  isSyncing: boolean;
-  lastSync: Date | null;
-  error: string | null;
-  lastItemCounts?: {
-    assets: number;
-    users: number;
-    licenses: number;
-    consumables: number;
-  };
 }
 
 export interface CloudConnectionInfo {
@@ -125,6 +94,10 @@ interface AppContextType {
   supabaseInfo: SupabaseConnectionInfo;
   testSupabaseConnection: () => Promise<any>;
   migrateToSupabase: () => Promise<{ success: boolean; message: string; transferred?: any }>;
+  migrateToFirebase: () => Promise<{ success: boolean; message: string; counts?: any }>;
+  testFirestoreConnection: () => Promise<any>;
+  deleteSupabaseDatabase: () => void;
+  firebaseConfig: any;
   supabaseSqlSchema: string;
   supabaseRecreateSqlSchema: string;
   recreateAllDatabases: () => Promise<{ success: boolean; message: string }>;
@@ -150,25 +123,6 @@ interface AppContextType {
   clearAllActivities: () => Promise<void>;
   forceCloudSync: () => Promise<void>;
   testConnection: () => Promise<any>;
-  sheetsAutoSyncEnabled: boolean;
-  sheetsAutoSyncInterval: number;
-  sheetsSyncState: SheetsSyncState;
-  setSheetsAutoSyncEnabled: (enabled: boolean) => void;
-  setSheetsAutoSyncInterval: (intervalSeconds: number) => void;
-  syncWithSheets: (silent?: boolean) => Promise<{ success: boolean; message?: string; counts?: any }>;
-  pushToSheets: () => Promise<{ success: boolean; message?: string }>;
-  deleteSheetsDatabase: (deleteFromDrive?: boolean) => Promise<{ success: boolean; message: string }>;
-  sheetsSyncLogs: SheetsSyncLogEntry[];
-  addSheetsSyncLog: (log: Omit<SheetsSyncLogEntry, "id">) => SheetsSyncLogEntry;
-  clearSheetsSyncLogs: () => void;
-  testGoogleSheetsHandshake: () => Promise<HandshakeResult>;
-  importAllFromSheets: (data: {
-    assets?: Asset[];
-    licenses?: License[];
-    consumables?: Consumable[];
-    users?: User[];
-    activities?: Activity[];
-  }) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -273,11 +227,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToast(prev => prev ? { ...prev, visible: false } : null);
   }, []);
 
-  const [dbProvider, setDbProviderState] = useState<"firebase" | "supabase">("supabase");
+  const [dbProvider, setDbProviderState] = useState<"firebase" | "supabase">("firebase");
   const [supabaseConfig, setSupabaseConfigState] = useState<SupabaseConfig>(() => getSavedSupabaseConfig());
   const [supabaseInfo, setSupabaseInfo] = useState<SupabaseConnectionInfo>(() => ({
-    status: supabaseConfig.url ? "syncing" : "disconnected",
-    url: supabaseConfig.url || "",
+    status: "disconnected",
+    url: "",
     latencyMs: null,
   }));
 
@@ -307,6 +261,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDbProviderState(prov);
   }, []);
 
+  const deleteSupabaseDatabase = useCallback(() => {
+    deleteAndClearSupabaseConfig();
+    setSupabaseConfigState({ url: "", anonKey: "" });
+    setSupabaseInfo({
+      status: "disconnected",
+      url: "",
+      latencyMs: null,
+      lastTestResult: undefined
+    });
+    setDbProviderState("firebase");
+    showToast("Supabase Excluído", "Todas as credenciais e conexões com o Supabase foram deletadas. O sistema está conectado exclusivamente ao Firebase Firestore.", "info");
+  }, [showToast]);
+
   const testSupabaseConnection = useCallback(async () => {
     setSupabaseInfo(prev => ({ ...prev, status: "syncing" }));
     const res = await runTestSupabase();
@@ -320,540 +287,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const [cloudInfo, setCloudInfo] = useState<CloudConnectionInfo>({
-    status: "offline",
-    lastSync: null,
-    databaseId: (firebaseConfig as any).firestoreDatabaseId || "(desconectado)",
-    projectId: firebaseConfig.projectId || "desconectado",
+    status: "connected",
+    lastSync: new Date(),
+    databaseId: (firebaseConfig as any).firestoreDatabaseId || "(default)",
+    projectId: firebaseConfig.projectId || "gen-lang-client-0378416982",
     latencyMs: null
   });
 
-  // Google Sheets Periodic Auto-Sync State & Configuration
-  const [sheetsAutoSyncEnabled, setSheetsAutoSyncEnabledState] = useState<boolean>(() => {
-    const dbId = localStorage.getItem("ac_sheets_db_id");
-    if (!dbId) return false;
-    const saved = localStorage.getItem("ac_sheets_autosync_enabled");
-    return saved !== null ? saved === "true" : false;
-  });
-
-  const [sheetsAutoSyncInterval, setSheetsAutoSyncIntervalState] = useState<number>(() => {
-    const saved = localStorage.getItem("ac_sheets_autosync_interval");
-    return saved ? parseInt(saved, 10) : 30;
-  });
-
-  const [sheetsSyncState, setSheetsSyncState] = useState<SheetsSyncState>({
-    isSyncing: false,
-    lastSync: (() => {
-      const saved = localStorage.getItem("ac_sheets_db_last_sync");
-      return saved ? new Date() : null;
-    })(),
-    error: null,
-  });
-
-  // Google Sheets Synchronization & Handshake Logs (persisted in localStorage)
-  const [sheetsSyncLogs, setSheetsSyncLogs] = useState<SheetsSyncLogEntry[]>(() => {
-    try {
-      const saved = localStorage.getItem("ac_sheets_sync_logs");
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.warn("Failed to load sheets sync logs:", e);
-    }
-    return [];
-  });
-
-  const addSheetsSyncLog = useCallback((log: Omit<SheetsSyncLogEntry, "id">): SheetsSyncLogEntry => {
-    const entry: SheetsSyncLogEntry = {
-      ...log,
-      id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      timestamp: log.timestamp || new Date().toISOString()
-    };
-    setSheetsSyncLogs(prev => {
-      const updated = [entry, ...prev].slice(0, 30);
-      try {
-        localStorage.setItem("ac_sheets_sync_logs", JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-    return entry;
-  }, []);
-
-  const clearSheetsSyncLogs = useCallback(() => {
-    setSheetsSyncLogs([]);
-    localStorage.removeItem("ac_sheets_sync_logs");
-  }, []);
-
-  // Handshake verification test function
-  const testGoogleSheetsHandshake = useCallback(async (): Promise<HandshakeResult> => {
-    const token = getStoredAccessToken();
-    const dbId = localStorage.getItem("ac_sheets_db_id") || undefined;
-    const res = await testGoogleSheetsApiHandshake(token || "", dbId);
-
-    addSheetsSyncLog({
-      timestamp: res.timestamp,
-      type: "handshake",
-      status: res.success ? "success" : "error",
-      actionName: "Handshake & Teste de Conexão API",
-      message: res.message,
-      details: res.spreadsheetTitle ? `Planilha: "${res.spreadsheetTitle}" (${res.sheetsCount || 0} abas)` : undefined,
-      durationMs: res.latencyMs,
-      statusCode: res.statusCode,
-      endpointTested: res.endpointTested,
-      errorDetails: res.errorDetails
-    });
-
-    return res;
-  }, [addSheetsSyncLog]);
-
-  // Keep ref to latest data to avoid stale closures
-  const latestDataRef = useRef({ assets, licenses, consumables, users, activities });
-  useEffect(() => {
-    latestDataRef.current = { assets, licenses, consumables, users, activities };
-  }, [assets, licenses, consumables, users, activities]);
-
-  const lastLocalEditTimeRef = useRef<number>(0);
-  const sheetsPushTimerRef = useRef<any>(null);
-
-  const setSheetsAutoSyncEnabled = useCallback((enabled: boolean) => {
-    setSheetsAutoSyncEnabledState(enabled);
-    localStorage.setItem("ac_sheets_autosync_enabled", enabled ? "true" : "false");
-    window.dispatchEvent(new Event("ac-sheets-updated"));
-  }, []);
-
-  const setSheetsAutoSyncInterval = useCallback((intervalSeconds: number) => {
-    setSheetsAutoSyncIntervalState(intervalSeconds);
-    localStorage.setItem("ac_sheets_autosync_interval", intervalSeconds.toString());
-    window.dispatchEvent(new Event("ac-sheets-updated"));
-  }, []);
-
-  // Debounced auto-push to Google Sheets whenever any record is created/edited/deleted
-  const triggerAutoPushToSheets = useCallback(() => {
-    lastLocalEditTimeRef.current = Date.now();
-    const token = getStoredAccessToken();
-    const dbId = localStorage.getItem("ac_sheets_db_id");
-    if (!token || !dbId) return;
-
-    if (sheetsPushTimerRef.current) {
-      clearTimeout(sheetsPushTimerRef.current);
-    }
-
-    sheetsPushTimerRef.current = setTimeout(async () => {
-      const startTime = Date.now();
-      try {
-        const current = latestDataRef.current;
-        setSheetsSyncState(prev => ({ ...prev, isSyncing: true, error: null }));
-
-        const res = await pushCompleteDatabaseToSheets(token, dbId, {
-          assets: current.assets,
-          licenses: current.licenses,
-          consumables: current.consumables,
-          users: current.users,
-          activities: current.activities,
-        });
-
-        const now = new Date();
-        const timeFormatted = now.toLocaleString("pt-BR");
-        localStorage.setItem("ac_sheets_db_last_sync", timeFormatted);
-
-        setSheetsSyncState(prev => ({
-          ...prev,
-          isSyncing: false,
-          lastSync: now,
-          error: null,
-          lastItemCounts: {
-            assets: current.assets.length,
-            users: current.users.length,
-            licenses: current.licenses.length,
-            consumables: current.consumables.length,
-          }
-        }));
-
-        addSheetsSyncLog({
-          timestamp: now.toISOString(),
-          type: "push",
-          status: "success",
-          actionName: "Auto-Push em Segundo Plano",
-          message: `Alterações gravadas no Sheets (${res.updatedTables.join(", ")})`,
-          durationMs: Date.now() - startTime,
-          statusCode: 200,
-          itemCounts: {
-            assets: current.assets.length,
-            licenses: current.licenses.length,
-            consumables: current.consumables.length,
-            users: current.users.length,
-            activities: current.activities.length,
-          }
-        });
-
-        window.dispatchEvent(new Event("ac-sheets-updated"));
-      } catch (err: any) {
-        console.warn("[Auto-Push to Google Sheets error]:", err);
-        setSheetsSyncState(prev => ({ ...prev, isSyncing: false, error: err?.message }));
-        addSheetsSyncLog({
-          timestamp: new Date().toISOString(),
-          type: "push",
-          status: "error",
-          actionName: "Auto-Push em Segundo Plano",
-          message: `Falha na gravação automática: ${err?.message || "Erro desconhecido"}`,
-          errorDetails: err?.message,
-          durationMs: Date.now() - startTime,
-          statusCode: 500,
-        });
-      }
-    }, 1000);
-  }, [addSheetsSyncLog]);
-
-  const syncWithSheets = useCallback(async (silent: boolean = false) => {
-    const token = getStoredAccessToken();
-    const dbId = localStorage.getItem("ac_sheets_db_id");
-    const startTime = Date.now();
-
-    if (!token || !dbId) {
-      if (!silent) {
-        showToast("Google Sheets Não Vinculado", "Conecte sua conta Google e vincule uma planilha para sincronizar.", "warning");
-      }
-      addSheetsSyncLog({
-        timestamp: new Date().toISOString(),
-        type: silent ? "auto_sync" : "pull",
-        status: "warning",
-        actionName: silent ? "Auto-Sync Periódico" : "Sincronização Bidirecional (Pull)",
-        message: "Operação abortada: Token Google ou ID da Planilha não configurados.",
-        errorDetails: "Conecte sua conta Google através do botão de login e selecione uma planilha ativa.",
-        durationMs: Date.now() - startTime,
-        statusCode: 401
-      });
-      return { success: false, message: "Token ou planilha não configurados" };
-    }
-
-    // If local changes were made within the last 6s and this is a background auto-sync, don't overwrite with stale data
-    if (silent && Date.now() - lastLocalEditTimeRef.current < 6000) {
-      return { success: true, message: "Aguardando gravação pendente" };
-    }
-
-    setSheetsSyncState(prev => ({ ...prev, isSyncing: true, error: null }));
-    try {
-      const data = await fetchCompleteDatabaseFromSheets(token, dbId);
-
-      if (data.assets && data.assets.length > 0) {
-        setAssets(data.assets);
-        localStorage.setItem("ac_assets", JSON.stringify(data.assets));
-      }
-      if (data.licenses && data.licenses.length > 0) {
-        setLicenses(data.licenses);
-        localStorage.setItem("ac_licenses", JSON.stringify(data.licenses));
-      }
-      if (data.consumables && data.consumables.length > 0) {
-        setConsumables(data.consumables);
-        localStorage.setItem("ac_consumables", JSON.stringify(data.consumables));
-      }
-      if (data.users && data.users.length > 0) {
-        setUsers(data.users);
-        localStorage.setItem("ac_users", JSON.stringify(data.users));
-      }
-      if (data.activities && data.activities.length > 0) {
-        setActivities(prev => {
-          const existingIds = new Set(prev.map(a => a.id));
-          const newActs = data.activities!.filter(a => !existingIds.has(a.id));
-          return [...newActs, ...prev].slice(0, 100);
-        });
-        localStorage.setItem("ac_activities", JSON.stringify(data.activities));
-      }
-
-      const now = new Date();
-      const timeFormatted = now.toLocaleString("pt-BR");
-      localStorage.setItem("ac_sheets_db_last_sync", timeFormatted);
-
-      setSheetsSyncState({
-        isSyncing: false,
-        lastSync: now,
-        error: null,
-        lastItemCounts: {
-          assets: data.assets?.length || 0,
-          users: data.users?.length || 0,
-          licenses: data.licenses?.length || 0,
-          consumables: data.consumables?.length || 0,
-        }
-      });
-
-      addSheetsSyncLog({
-        timestamp: now.toISOString(),
-        type: silent ? "auto_sync" : "pull",
-        status: "success",
-        actionName: silent ? "Auto-Sync Periódico (Pull)" : "Sincronização Bidirecional (Pull)",
-        message: `Leitura concluída (${Date.now() - startTime}ms): ${data.assets?.length || 0} ativos, ${data.licenses?.length || 0} licenças, ${data.consumables?.length || 0} consumíveis.`,
-        durationMs: Date.now() - startTime,
-        statusCode: 200,
-        itemCounts: {
-          assets: data.assets?.length || 0,
-          users: data.users?.length || 0,
-          licenses: data.licenses?.length || 0,
-          consumables: data.consumables?.length || 0,
-          activities: data.activities?.length || 0,
-        }
-      });
-
-      window.dispatchEvent(new Event("ac-sheets-updated"));
-
-      if (!silent) {
-        showToast(
-          "Sincronização Google Sheets",
-          `Base atualizada em tempo real: ${data.assets?.length || 0} ativos, ${data.licenses?.length || 0} licenças, ${data.consumables?.length || 0} consumíveis.`,
-          "success"
-        );
-      }
-
-      return {
-        success: true,
-        counts: {
-          assets: data.assets?.length || 0,
-          users: data.users?.length || 0,
-          licenses: data.licenses?.length || 0,
-          consumables: data.consumables?.length || 0,
-        }
-      };
-    } catch (err: any) {
-      console.warn("[Sheets Periodic Sync Error]:", err?.message);
-      setSheetsSyncState(prev => ({
-        ...prev,
-        isSyncing: false,
-        error: err?.message || "Falha na sincronização"
-      }));
-
-      addSheetsSyncLog({
-        timestamp: new Date().toISOString(),
-        type: silent ? "auto_sync" : "pull",
-        status: "error",
-        actionName: silent ? "Auto-Sync Periódico (Pull)" : "Sincronização Bidirecional (Pull)",
-        message: `Falha ao ler dados do Sheets: ${err?.message || "Erro na API"}`,
-        errorDetails: err?.message,
-        durationMs: Date.now() - startTime,
-        statusCode: err?.statusCode || 500
-      });
-
-      if (!silent) {
-        showToast("Erro na Sincronização Google Sheets", err?.message || "Falha ao ler dados da planilha.", "warning");
-      }
-      return { success: false, message: err?.message };
-    }
-  }, [showToast, addSheetsSyncLog]);
-
-  const pushToSheets = useCallback(async () => {
-    const token = getStoredAccessToken();
-    const dbId = localStorage.getItem("ac_sheets_db_id");
-    const startTime = Date.now();
-
-    if (!token || !dbId) {
-      showToast("Google Sheets Não Conectado", "Conecte sua conta Google e selecione a planilha para exportar.", "warning");
-      addSheetsSyncLog({
-        timestamp: new Date().toISOString(),
-        type: "push",
-        status: "warning",
-        actionName: "Gravação Manual Completa (Push)",
-        message: "Operação abortada: Conta Google não conectada ou planilha não definida.",
-        durationMs: Date.now() - startTime,
-        statusCode: 401
-      });
-      return { success: false, message: "Não conectado" };
-    }
-
-    if (sheetsPushTimerRef.current) {
-      clearTimeout(sheetsPushTimerRef.current);
-    }
-
-    setSheetsSyncState(prev => ({ ...prev, isSyncing: true, error: null }));
-    try {
-      const current = latestDataRef.current;
-      const res = await pushCompleteDatabaseToSheets(token, dbId, {
-        assets: current.assets,
-        licenses: current.licenses,
-        consumables: current.consumables,
-        users: current.users,
-        activities: current.activities
-      });
-
-      const now = new Date();
-      const timeFormatted = now.toLocaleString("pt-BR");
-      localStorage.setItem("ac_sheets_db_last_sync", timeFormatted);
-
-      setSheetsSyncState(prev => ({
-        ...prev,
-        isSyncing: false,
-        lastSync: now,
-        error: null,
-        lastItemCounts: {
-          assets: current.assets.length,
-          users: current.users.length,
-          licenses: current.licenses.length,
-          consumables: current.consumables.length,
-        }
-      }));
-
-      addSheetsSyncLog({
-        timestamp: now.toISOString(),
-        type: "push",
-        status: "success",
-        actionName: "Gravação Manual Completa (Push)",
-        message: `Todas as tabelas foram gravadas na planilha (${res.updatedTables.join(", ")}).`,
-        durationMs: Date.now() - startTime,
-        statusCode: 200,
-        itemCounts: {
-          assets: current.assets.length,
-          licenses: current.licenses.length,
-          consumables: current.consumables.length,
-          users: current.users.length,
-          activities: current.activities.length,
-        }
-      });
-
-      window.dispatchEvent(new Event("ac-sheets-updated"));
-      showToast("Google Sheets Atualizado", `Base de dados gravada com sucesso (${res.updatedTables.join(", ")}).`, "success");
-      return { success: true };
-    } catch (err: any) {
-      console.error("Push to sheets failed:", err);
-      setSheetsSyncState(prev => ({ ...prev, isSyncing: false, error: err?.message }));
-      
-      addSheetsSyncLog({
-        timestamp: new Date().toISOString(),
-        type: "push",
-        status: "error",
-        actionName: "Gravação Manual Completa (Push)",
-        message: `Erro ao gravar dados no Sheets: ${err?.message || "Falha na API"}`,
-        errorDetails: err?.message,
-        durationMs: Date.now() - startTime,
-        statusCode: 500
-      });
-
-      showToast("Falha ao Gravar no Sheets", err?.message || "Erro ao gravar dados na planilha.", "warning");
-      return { success: false, message: err?.message };
-    }
-  }, [showToast, addSheetsSyncLog]);
-
-  // Periodic Auto-Sync Timer for Google Sheets
-  useEffect(() => {
-    if (!sheetsAutoSyncEnabled) return;
-
-    let isMounted = true;
-
-    const executePeriodicSync = () => {
-      if (!isMounted) return;
-      const token = getStoredAccessToken();
-      const dbId = localStorage.getItem("ac_sheets_db_id");
-      if (token && dbId && Date.now() - lastLocalEditTimeRef.current > 5000) {
-        syncWithSheets(true);
-      }
-    };
-
-    const intervalMs = Math.max(10, sheetsAutoSyncInterval) * 1000;
-    const intervalTimer = setInterval(executePeriodicSync, intervalMs);
-
-    const onWindowFocusSheets = () => {
-      executePeriodicSync();
-    };
-
-    window.addEventListener("focus", onWindowFocusSheets);
-    document.addEventListener("visibilitychange", onWindowFocusSheets);
-
-    return () => {
-      isMounted = false;
-      clearInterval(intervalTimer);
-      window.removeEventListener("focus", onWindowFocusSheets);
-      document.removeEventListener("visibilitychange", onWindowFocusSheets);
-    };
-  }, [sheetsAutoSyncEnabled, sheetsAutoSyncInterval, syncWithSheets]);
-
-  // Purge any pre-existing Google Sheets database configuration on app load as requested
-  useEffect(() => {
-    const existingDbId = localStorage.getItem("ac_sheets_db_id");
-    if (existingDbId) {
-      clearStoredSheetsDatabase();
-      setSheetsAutoSyncEnabledState(false);
-      setSheetsSyncLogs([]);
-      setSheetsSyncState({
-        isSyncing: false,
-        lastSync: null,
-        error: null,
-      });
-    }
-  }, []);
-
-  // Delete & unlink Google Sheets database
-  const deleteSheetsDatabase = useCallback(async (deleteFromDrive: boolean = true): Promise<{ success: boolean; message: string }> => {
-    const token = getStoredAccessToken();
-    const dbId = localStorage.getItem("ac_sheets_db_id");
-    const dbName = localStorage.getItem("ac_sheets_db_name") || "Base Google Sheets";
-
-    let driveMsg = "";
-    if (token && dbId && deleteFromDrive) {
-      try {
-        const driveResult = await deleteGoogleDriveSpreadsheet(token, dbId);
-        driveMsg = driveResult.message;
-      } catch (err: any) {
-        console.warn("Could not delete file directly from Google Drive:", err);
-        driveMsg = "Arquivo local desvinculado.";
-      }
-    }
-
-    // Clear local storage keys
-    clearStoredSheetsDatabase();
-
-    // Reset local states and auto-sync
-    setSheetsAutoSyncEnabledState(false);
-    localStorage.setItem("ac_sheets_autosync_enabled", "false");
-    setSheetsSyncLogs([]);
-    setSheetsSyncState({
-      isSyncing: false,
-      lastSync: null,
-      error: null,
-    });
-
-    // Record audit activity
-    const newActivity: Activity = {
-      id: `act-${Date.now()}`,
-      title: "Desvinculação e Exclusão de Base Google Sheets",
-      action: "Exclusão de Base",
-      target: dbName,
-      user: currentUser ? currentUser.name : "Administrador",
-      time: "Agora mesmo",
-      type: "administrativo",
-      category: "Google Sheets",
-      details: driveMsg || "Base de dados desvinculada do sistema.",
-    };
-    setActivities(prev => [newActivity, ...prev]);
-
-    showToast(
-      "Base Google Sheets Excluída",
-      `A base de dados do Google Sheets foi removida e desvinculada do sistema. ${driveMsg}`.trim(),
-      "info"
-    );
-
-    return {
-      success: true,
-      message: `Base de dados do Google Sheets excluída com sucesso. ${driveMsg}`.trim()
-    };
-  }, [currentUser, showToast]);
-
-  // Direct persistence helpers (Supabase + Google Sheets)
+  // Direct persistence helpers (Firebase Firestore)
   const persistSave = useCallback(async (collectionName: string, item: any) => {
-    lastLocalEditTimeRef.current = Date.now();
-    triggerAutoPushToSheets();
     try {
-      // Save directly to Supabase
-      await saveDocumentToSupabase(collectionName, item);
+      // Save directly to Firebase Firestore
+      await saveDocumentToFirestore(collectionName, item);
     } catch (err) {
-      console.warn(`[Supabase Cloud] Falha ao salvar em ${collectionName}:`, err);
+      console.warn(`[Firebase Firestore] Falha ao salvar em ${collectionName}:`, err);
     }
-  }, [triggerAutoPushToSheets]);
+  }, []);
 
   const persistDelete = useCallback(async (collectionName: string, id: string) => {
-    lastLocalEditTimeRef.current = Date.now();
-    triggerAutoPushToSheets();
     try {
-      // Delete directly from Supabase
-      await deleteDocumentFromSupabase(collectionName, id);
+      // Delete directly from Firebase Firestore
+      await deleteDocumentFromFirestore(collectionName, id);
     } catch (err) {
-      console.warn(`[Supabase Cloud] Falha ao excluir ${collectionName}/${id}:`, err);
+      console.warn(`[Firebase Firestore] Falha ao excluir ${collectionName}/${id}:`, err);
     }
-  }, [triggerAutoPushToSheets]);
+  }, []);
 
   // Sync state to local storage
   useEffect(() => {
@@ -881,27 +339,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [activities]);
 
   const forceCloudSync = useCallback(async () => {
-    setSupabaseInfo(prev => ({ ...prev, status: "syncing" }));
+    setCloudInfo(prev => ({ ...prev, status: "syncing" }));
     try {
-      const data = await loadDatabaseFromSupabase(initialUsers);
+      const data = await loadDatabaseFromFirestore(initialUsers);
       if (data.users && data.users.length > 0) setUsers(data.users);
       if (data.assets) setAssets(data.assets);
       if (data.licenses) setLicenses(data.licenses);
       if (data.consumables) setConsumables(data.consumables);
       if (data.activities) setActivities(data.activities);
 
-      setSupabaseInfo(prev => ({
+      setCloudInfo(prev => ({
         ...prev,
         status: "connected",
+        lastSync: new Date(),
       }));
     } catch (err) {
-      console.error("Force Supabase sync failed:", err);
-      setSupabaseInfo(prev => ({ ...prev, status: "error" }));
+      console.error("Force Firebase sync failed:", err);
+      setCloudInfo(prev => ({ ...prev, status: "error" }));
     }
   }, []);
 
-  // 1-Click Migration from current local/cache data to Supabase
-  const migrateToSupabase = useCallback(async () => {
+  const testConnection = useCallback(async () => {
+    setCloudInfo(prev => ({ ...prev, status: "syncing" }));
+    const res = await testFirestoreConnection();
+    setCloudInfo(prev => ({
+      ...prev,
+      status: res.success ? "connected" : "error",
+      latencyMs: res.latencyMs,
+      databaseId: res.databaseId,
+      projectId: res.projectId,
+      lastSync: res.success ? new Date() : prev.lastSync,
+      lastTestResult: res,
+    }));
+    return res;
+  }, []);
+
+  // 1-Click Migration from current local/cache data to Firebase Firestore
+  const migrateToFirebase = useCallback(async () => {
     const dataToMigrate = {
       users,
       assets,
@@ -910,44 +384,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activities,
     };
 
-    const res = await migrateDataToSupabase(dataToMigrate);
+    const res = await migrateDataToFirebase(dataToMigrate);
     if (res.success) {
-      setDbProvider("supabase");
-      await testSupabaseConnection();
+      setDbProvider("firebase");
+      await testConnection();
     }
     return res;
-  }, [users, assets, licenses, consumables, activities, setDbProvider, testSupabaseConnection]);
+  }, [users, assets, licenses, consumables, activities, setDbProvider, testConnection]);
 
-  const testConnection = useCallback(async () => {
-    // Firebase is disconnected, test Supabase instead
-    return await testSupabaseConnection();
-  }, [testSupabaseConnection]);
+  const migrateToSupabase = useCallback(async () => {
+    const dataToMigrate = {
+      users,
+      assets,
+      licenses,
+      consumables,
+      activities,
+    };
+    const res = await migrateDataToSupabase(dataToMigrate);
+    return res;
+  }, [users, assets, licenses, consumables, activities]);
 
-  // Synchronize with Supabase database on mount and subscribe to postgres realtime updates
+  // Synchronize with Firebase Firestore database on mount and subscribe to realtime updates
   useEffect(() => {
+    // Delete any cached Supabase credentials
+    deleteAndClearSupabaseConfig();
+
     let isMounted = true;
 
     const initDbSync = async () => {
       try {
-        const sData = await loadDatabaseFromSupabase(initialUsers);
+        setCloudInfo(prev => ({ ...prev, status: "syncing" }));
+        const fData = await loadDatabaseFromFirestore(initialUsers);
         if (!isMounted) return;
-        if (sData.users && sData.users.length > 0) setUsers(sData.users);
-        if (sData.assets) setAssets(sData.assets);
-        if (sData.licenses) setLicenses(sData.licenses);
-        if (sData.consumables) setConsumables(sData.consumables);
-        if (sData.activities) setActivities(sData.activities);
+        if (fData.users && fData.users.length > 0) setUsers(fData.users);
+        if (fData.assets) setAssets(fData.assets);
+        if (fData.licenses) setLicenses(fData.licenses);
+        if (fData.consumables) setConsumables(fData.consumables);
+        if (fData.activities) setActivities(fData.activities);
+
+        setCloudInfo(prev => ({
+          ...prev,
+          status: "connected",
+          lastSync: new Date(),
+        }));
+
+        testConnection().catch(() => {});
       } catch (error) {
-        console.error("Failed to sync Supabase database on mount:", error);
+        console.error("Failed to sync Firestore database on mount:", error);
+        if (isMounted) {
+          setCloudInfo(prev => ({ ...prev, status: "error" }));
+        }
       }
     };
 
     initDbSync();
 
-    // 1. Subscribe to Supabase Postgres Realtime changes
-    const supaRealtimeSub = subscribeToSupabaseRealtime((_table) => {
-      if (!isMounted) return;
-      console.log(`[Supabase Realtime] Mudança detectada na tabela ${_table}, atualizando dados locais...`);
-      forceCloudSync();
+    // 1. Subscribe to Firebase Firestore Realtime collections
+    const unsubUsers = subscribeToCollection<User>("users", (updated) => {
+      if (!isMounted || !updated || updated.length === 0) return;
+      setUsers(updated);
+    });
+    const unsubAssets = subscribeToCollection<Asset>("assets", (updated) => {
+      if (!isMounted || !updated) return;
+      setAssets(updated);
+    });
+    const unsubLicenses = subscribeToCollection<License>("licenses", (updated) => {
+      if (!isMounted || !updated) return;
+      setLicenses(updated);
+    });
+    const unsubConsumables = subscribeToCollection<Consumable>("consumables", (updated) => {
+      if (!isMounted || !updated) return;
+      setConsumables(updated);
+    });
+    const unsubActivities = subscribeToCollection<Activity>("activities", (updated) => {
+      if (!isMounted || !updated) return;
+      setActivities(updated);
     });
 
     // 2. Tab Focus & Background Polling to guarantee fresh sync on mobile or background devices
@@ -967,19 +478,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return () => {
       isMounted = false;
-      if (supaRealtimeSub) supaRealtimeSub.unsubscribe();
+      unsubUsers();
+      unsubAssets();
+      unsubLicenses();
+      unsubConsumables();
+      unsubActivities();
       window.removeEventListener("focus", onWindowFocus);
       document.removeEventListener("visibilitychange", onWindowFocus);
       clearInterval(syncInterval);
     };
-  }, [forceCloudSync]);
-
-  // Initial Supabase health test on mount
-  useEffect(() => {
-    if (supabaseConfig.url && supabaseConfig.anonKey) {
-      testSupabaseConnection().catch(() => {});
-    }
-  }, [supabaseConfig.url, supabaseConfig.anonKey, testSupabaseConnection]);
+  }, [forceCloudSync, testConnection]);
 
   // Auth Operations
   const login = (identifier: string, password?: string): boolean => {
@@ -1461,8 +969,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     
     try {
-      await clearSupabaseTables(["users", "assets", "licenses", "consumables", "activities"]);
-      await saveDocumentToSupabase("users", adminUser);
+      await clearAllCollectionsAndCreateAdmin(adminUser);
       
       // Update local React state
       setUsers([adminUser]);
@@ -1480,16 +987,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem("ac_consumables", JSON.stringify([]));
       localStorage.setItem("ac_activities", JSON.stringify([]));
       
-      showToast("Banco de Dados Zerado", "Todo o banco de dados foi resetado no Supabase. Usuário master 'admin' criado com senha 'admin'.", "success");
+      await testConnection();
+      showToast("Banco de Dados Zerado", "Todo o banco de dados foi resetado no Firebase Firestore. Usuário master 'admin' criado com senha 'admin'.", "success");
     } catch (err) {
       console.error("Failed to reset database:", err);
-      showToast("Erro ao Zerar", "Houve uma falha ao comunicar com o Supabase.", "warning");
+      showToast("Erro ao Zerar", "Houve uma falha ao comunicar com o Firebase Firestore.", "warning");
     }
   };
 
   const clearItemTables = async () => {
     try {
-      await clearSupabaseTables(["assets", "licenses", "consumables", "activities"]);
+      await clearSpecificCollections(["assets", "licenses", "consumables", "activities"]);
       setAssets([]);
       setLicenses([]);
       setConsumables([]);
@@ -1498,22 +1006,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem("ac_licenses", JSON.stringify([]));
       localStorage.setItem("ac_consumables", JSON.stringify([]));
       localStorage.setItem("ac_activities", JSON.stringify([]));
-      showToast("Tabelas Limpas", "Os dados de Ativos, Consumíveis, Licenças e Históricos de Atividades foram zerados no Supabase.", "success");
+      await testConnection();
+      showToast("Coleções Limpas", "Os dados de Ativos, Consumíveis, Licenças e Históricos foram zerados no Firebase Firestore.", "success");
     } catch (err) {
-      console.error("Failed to clear tables:", err);
-      showToast("Erro ao Limpar", "Houve uma falha ao comunicar com o Supabase.", "warning");
+      console.error("Failed to clear collections:", err);
+      showToast("Erro ao Limpar", "Houve uma falha ao comunicar com o Firebase Firestore.", "warning");
     }
   };
 
   const clearAllActivities = async () => {
     try {
-      await clearSupabaseTables(["activities"]);
+      await clearSpecificCollections(["activities"]);
       setActivities([]);
       localStorage.setItem("ac_activities", JSON.stringify([]));
-      showToast("Histórico Limpo", "Todo o histórico de atividades foi apagado com sucesso no Supabase.", "success");
+      await testConnection();
+      showToast("Histórico Limpo", "Todo o histórico de atividades foi apagado com sucesso no Firebase Firestore.", "success");
     } catch (err) {
       console.error("Failed to clear activities:", err);
-      showToast("Erro ao Limpar", "Houve uma falha ao apagar o histórico de atividades no Supabase.", "warning");
+      showToast("Erro ao Limpar", "Houve uma falha ao apagar o histórico de atividades no Firebase Firestore.", "warning");
     }
   };
 
@@ -1533,19 +1043,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const initialActivity: Activity = {
       id: `act-init-${Date.now()}`,
-      title: "Novo Banco de Dados Criado no Supabase",
+      title: "Novo Banco de Dados Criado no Firebase Firestore",
       user: "Admin Global",
       action: "Inicialização",
-      target: "Supabase PostgreSQL",
-      details: "Todas as tabelas antigas foram excluídas e recriadas com estrutura limpa.",
+      target: "Firebase Firestore",
+      details: "Todas as coleções antigas foram excluídas e recriadas com estrutura limpa em nuvem.",
       time: "Agora mesmo",
       type: "sistema",
       category: "Banco de Dados",
     };
 
     try {
-      // 1. Wipe and re-seed Supabase instance
-      const supaResult = await recreateSupabaseDatabase(adminUser);
+      // 1. Wipe and re-seed Firebase Firestore instance
+      await clearAllCollectionsAndCreateAdmin(adminUser);
+      await saveDocumentToFirestore("activities", initialActivity);
 
       // 2. Wipe all local storage databases and caches
       localStorage.setItem("ac_user", JSON.stringify(adminUser));
@@ -1554,7 +1065,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem("ac_licenses", JSON.stringify([]));
       localStorage.setItem("ac_consumables", JSON.stringify([]));
       localStorage.setItem("ac_activities", JSON.stringify([initialActivity]));
-      localStorage.removeItem("ac_sheets_sync_logs");
 
       // 3. Reset in-memory React states
       setUsers([adminUser]);
@@ -1563,81 +1073,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setConsumables([]);
       setActivities([initialActivity]);
       setCurrentUser(adminUser);
-      setSheetsSyncLogs([]);
 
-      // 4. Update Supabase live info
-      await testSupabaseConnection();
+      // 4. Update live info
+      await testConnection();
 
       showToast(
-        "Bancos de Dados Excluídos & Recriados",
-        supaResult.success
-          ? "Todas as tabelas anteriores foram zeradas e um novo banco limpo foi estabelecido no Supabase!"
-          : "Armazenamento local zerado. Para o Supabase, execute o script SQL caso as tabelas precisem ser recriadas.",
-        supaResult.success ? "success" : "warning"
+        "Banco de Dados Recriado",
+        "Todas as coleções anteriores foram zeradas e um novo banco limpo foi estabelecido no Firebase Firestore!",
+        "success"
       );
 
-      return supaResult;
+      return {
+        success: true,
+        message: "Banco de dados recriado com sucesso no Firebase Firestore."
+      };
     } catch (err: any) {
       console.error("Erro ao recriar banco de dados:", err);
-      showToast("Aviso na Recriação", err?.message || "Falha na comunicação com o Supabase.", "warning");
+      showToast("Aviso na Recriação", err?.message || "Falha na comunicação com o Firebase Firestore.", "warning");
       return {
         success: false,
         message: err?.message || "Erro desconhecido ao recriar banco de dados.",
       };
-    }
-  };
-
-  const importAllFromSheets = async (data: {
-    assets?: Asset[];
-    licenses?: License[];
-    consumables?: Consumable[];
-    users?: User[];
-    activities?: Activity[];
-  }) => {
-    try {
-      if (data.assets && data.assets.length > 0) {
-        setAssets(data.assets);
-        localStorage.setItem("ac_assets", JSON.stringify(data.assets));
-      }
-      if (data.licenses && data.licenses.length > 0) {
-        setLicenses(data.licenses);
-        localStorage.setItem("ac_licenses", JSON.stringify(data.licenses));
-      }
-      if (data.consumables && data.consumables.length > 0) {
-        setConsumables(data.consumables);
-        localStorage.setItem("ac_consumables", JSON.stringify(data.consumables));
-      }
-      if (data.users && data.users.length > 0) {
-        setUsers(data.users);
-        localStorage.setItem("ac_users", JSON.stringify(data.users));
-      }
-      if (data.activities && data.activities.length > 0) {
-        setActivities(prev => [...data.activities!, ...prev].slice(0, 100));
-        localStorage.setItem("ac_activities", JSON.stringify(data.activities));
-      }
-
-      // Add a sync activity
-      const syncAct: Activity = {
-        id: `act-sheets-sync-${Date.now()}`,
-        title: "Sincronização Google Sheets",
-        time: "Agora mesmo",
-        user: currentUser?.name || "Administrador",
-        action: "Sincronização Google Sheets",
-        target: "Base de Dados Relacional",
-        category: "Cloud Sync",
-        type: "automatico",
-        details: `Importados ${data.assets?.length || 0} ativos, ${data.licenses?.length || 0} licenças e ${data.consumables?.length || 0} consumíveis da base Google Sheets.`
-      };
-      setActivities(prev => [syncAct, ...prev]);
-
-      showToast(
-        "Base Sincronizada", 
-        `Dados carregados com sucesso do Google Sheets: ${data.assets?.length || 0} ativos, ${data.licenses?.length || 0} licenças, ${data.consumables?.length || 0} consumíveis.`,
-        "success"
-      );
-    } catch (err: any) {
-      console.error("Failed to import from sheets:", err);
-      showToast("Erro de Importação", err?.message || "Falha ao aplicar dados do Google Sheets.", "warning");
     }
   };
 
@@ -1659,6 +1115,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabaseInfo,
         testSupabaseConnection,
         migrateToSupabase,
+        migrateToFirebase,
+        testFirestoreConnection,
+        deleteSupabaseDatabase,
+        firebaseConfig,
         supabaseSqlSchema: SUPABASE_SQL_SCHEMA,
         supabaseRecreateSqlSchema: SUPABASE_RECREATE_DATABASE_SQL,
         recreateAllDatabases,
@@ -1684,19 +1144,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearAllActivities,
         forceCloudSync,
         testConnection,
-        sheetsAutoSyncEnabled,
-        sheetsAutoSyncInterval,
-        sheetsSyncState,
-        sheetsSyncLogs,
-        addSheetsSyncLog,
-        clearSheetsSyncLogs,
-        testGoogleSheetsHandshake,
-        setSheetsAutoSyncEnabled,
-        setSheetsAutoSyncInterval,
-        syncWithSheets,
-        pushToSheets,
-        deleteSheetsDatabase,
-        importAllFromSheets,
       }}
     >
       {children}

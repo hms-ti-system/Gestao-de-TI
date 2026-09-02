@@ -1,6 +1,6 @@
 {
   "name": "Gestor de Ativos",
-  "description": "Plataforma corporativa para governança, controle de ciclo de vida de ativos de TI, licenças de software, consumíveis e integração bidirecional com Google Planilhas e Drive.",
+  "description": "Plataforma corporativa para governança, controle de ciclo de vida de ativos de TI, licenças de software e consumíveis com sincronização em tempo real no Firebase Firestore.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

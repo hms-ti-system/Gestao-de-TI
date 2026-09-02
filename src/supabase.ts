@@ -39,12 +39,19 @@ export function saveSupabaseConfig(config: SupabaseConfig) {
   cachedClient = null;
 }
 
+export function deleteAndClearSupabaseConfig() {
+  localStorage.removeItem(LOCAL_STORAGE_KEY_URL);
+  localStorage.removeItem(LOCAL_STORAGE_KEY_KEY);
+  localStorage.removeItem(LOCAL_STORAGE_KEY_PROVIDER);
+  cachedClient = null;
+}
+
 export function getActiveDbProvider(): "supabase" | "firebase" {
   const saved = localStorage.getItem(LOCAL_STORAGE_KEY_PROVIDER);
   if (saved === "supabase" || saved === "firebase") {
     return saved;
   }
-  return "supabase";
+  return "firebase";
 }
 
 export function setActiveDbProvider(provider: "firebase" | "supabase") {

@@ -10,12 +10,8 @@ import {
   AlertTriangle, 
   UserCheck, 
   Database, 
-  RefreshCw, 
-  CheckCircle2, 
-  XCircle, 
-  Activity as ActivityIcon, 
-  ShieldCheck, 
-  Zap
+  ShieldCheck,
+  Flame
 } from "lucide-react";
 import { Asset } from "../types";
 
@@ -36,26 +32,18 @@ export const Header: React.FC<HeaderProps> = ({
     licenses, 
     users, 
     consumables, 
-    forceCloudSync, 
-    supabaseInfo, 
-    supabaseConfig, 
-    testSupabaseConnection, 
+    cloudInfo,
     showToast 
   } = useApp();
   
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showSupabaseModal, setShowSupabaseModal] = useState(false);
-
-  const [isTestingSupa, setIsTestingSupa] = useState(false);
-  const [isSyncingSupa, setIsSyncingSupa] = useState(false);
 
   const searchRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
-  const supaModalRef = useRef<HTMLDivElement>(null);
 
-  // Close suggestions, notifications, and db modals when clicking outside
+  // Close suggestions and notifications when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -64,37 +52,10 @@ export const Header: React.FC<HeaderProps> = ({
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setShowNotifications(false);
       }
-      if (supaModalRef.current && !supaModalRef.current.contains(e.target as Node)) {
-        setShowSupabaseModal(false);
-      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  const handleRunSupabaseTest = async () => {
-    setIsTestingSupa(true);
-    try {
-      const res = await testSupabaseConnection();
-      showToast(
-        res.success ? "Conexão Supabase OK" : "Aviso Supabase",
-        res.message,
-        res.success ? "success" : "warning"
-      );
-    } finally {
-      setIsTestingSupa(false);
-    }
-  };
-
-  const handleForceSupabaseSync = async () => {
-    setIsSyncingSupa(true);
-    try {
-      await forceCloudSync();
-      showToast("Sincronizado", "Dados atualizados com sucesso do Supabase.", "success");
-    } finally {
-      setIsSyncingSupa(false);
-    }
-  };
 
   // Filter assets based on query
   const filteredSuggestions = searchQuery.trim() === "" 
@@ -202,167 +163,27 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Header actions */}
       <div className="flex items-center gap-2 sm:gap-2.5">
-        {/* Supabase Connection Status Badge */}
-        <div ref={supaModalRef} className="relative">
-          <button
-            onClick={() => {
-              setShowSupabaseModal(!showSupabaseModal);
-            }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-              supabaseInfo.status === "connected"
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                : supabaseInfo.status === "syncing"
-                ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                : supabaseConfig.url
-                ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-            }`}
-            title="Clique para ver o status da conexão Supabase (PostgreSQL)"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                supabaseInfo.status === "connected" ? "bg-emerald-400" : supabaseInfo.status === "syncing" ? "bg-blue-400" : "bg-slate-400"
-              }`}></span>
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                supabaseInfo.status === "connected" ? "bg-emerald-600" : supabaseInfo.status === "syncing" ? "bg-blue-600" : "bg-slate-400"
-              }`}></span>
+        {/* Firebase Connection Status Indicator */}
+        <button
+          type="button"
+          onClick={() => setCurrentView("firebase")}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 rounded-xl text-xs font-semibold text-amber-900 transition-all cursor-pointer shadow-2xs"
+          title="Status da Conexão Firebase Firestore (Clique para ver detalhes e configurações)"
+        >
+          <Flame className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0" />
+          <span className="hidden sm:inline">Firebase</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          {cloudInfo.latencyMs !== null && (
+            <span className="font-mono text-[10px] text-amber-700 bg-amber-100/70 px-1.5 py-0.5 rounded hidden md:inline">
+              {cloudInfo.latencyMs}ms
             </span>
-            <Zap className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="hidden xl:inline">
-              {supabaseInfo.status === "connected"
-                ? "Supabase Conectado"
-                : supabaseInfo.status === "syncing"
-                ? "Supabase Sincronizando..."
-                : supabaseConfig.url
-                ? "Supabase Offline"
-                : "Supabase Pendente"}
-            </span>
-            <span className="xl:hidden hidden md:inline">
-              {supabaseInfo.status === "connected" ? "Supabase OK" : "Supabase"}
-            </span>
-            <span className="md:hidden inline text-[11px]">Supabase</span>
-          </button>
-
-          {/* Supabase Info Popover */}
-          {showSupabaseModal && (
-            <div className="absolute right-0 mt-3 w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-50 p-5 divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-150">
-              <div className="pb-4">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
-                      <Zap className="w-5 h-5" />
-                    </div>
-                    <h3 className="font-bold text-sm text-slate-800">Status Supabase PostgreSQL</h3>
-                  </div>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                    supabaseInfo.status === "connected" 
-                      ? "bg-emerald-100 text-emerald-800" 
-                      : supabaseInfo.status === "syncing"
-                      ? "bg-blue-100 text-blue-800"
-                      : "bg-slate-100 text-slate-700"
-                  }`}>
-                    {supabaseInfo.status === "connected" ? "Online" : supabaseInfo.status === "syncing" ? "Sincronizando" : "Pendente"}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Persistência relacional PostgreSQL no Supabase com sincronização em tempo real.
-                </p>
-              </div>
-
-              <div className="py-3 space-y-2.5 text-xs">
-                <div className="flex justify-between py-1 border-b border-slate-50">
-                  <span className="text-slate-500 font-medium">URL do Projeto:</span>
-                  <span className="font-mono text-slate-700 font-semibold truncate max-w-[200px] text-right" title={supabaseConfig.url || "Não configurado"}>
-                    {supabaseConfig.url || "Não configurado"}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-50">
-                  <span className="text-slate-500 font-medium">Motor de Dados:</span>
-                  <span className="text-slate-700 font-semibold">PostgreSQL (Relacional)</span>
-                </div>
-                {supabaseInfo.latencyMs !== null && (
-                  <div className="flex justify-between py-1 border-b border-slate-50">
-                    <span className="text-slate-500 font-medium">Latência de Comunicação:</span>
-                    <span className="text-emerald-700 font-bold">
-                      {supabaseInfo.latencyMs} ms
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between py-1 border-b border-slate-50">
-                  <span className="text-slate-500 font-medium">Status do Firebase:</span>
-                  <span className="text-slate-400 font-medium">
-                    Desconectado
-                  </span>
-                </div>
-
-                {supabaseInfo.lastTestResult?.counts && (
-                  <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200/60">
-                    <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <ActivityIcon className="w-3.5 h-3.5 text-emerald-600" />
-                      Linhas Gravadas no Supabase
-                    </div>
-                    <div className="grid grid-cols-4 gap-1.5 text-center text-xs">
-                      <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-xs">
-                        <div className="font-bold text-slate-800 text-xs">{supabaseInfo.lastTestResult.counts.assets ?? 0}</div>
-                        <div className="text-[9px] text-slate-400 font-medium">Ativos</div>
-                      </div>
-                      <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-xs">
-                        <div className="font-bold text-slate-800 text-xs">{supabaseInfo.lastTestResult.counts.users ?? 0}</div>
-                        <div className="text-[9px] text-slate-400 font-medium">Usuários</div>
-                      </div>
-                      <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-xs">
-                        <div className="font-bold text-slate-800 text-xs">{supabaseInfo.lastTestResult.counts.licenses ?? 0}</div>
-                        <div className="text-[9px] text-slate-400 font-medium">Licenças</div>
-                      </div>
-                      <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-xs">
-                        <div className="font-bold text-slate-800 text-xs">{supabaseInfo.lastTestResult.counts.consumables ?? 0}</div>
-                        <div className="text-[9px] text-slate-400 font-medium">Consumíveis</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Action buttons */}
-              <div className="pt-4 space-y-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleRunSupabaseTest}
-                    disabled={isTestingSupa}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50 shadow-xs cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingSupa ? "animate-spin" : ""}`} />
-                    {isTestingSupa ? "Testando..." : "Testar Conexão"}
-                  </button>
-                  <button
-                    onClick={handleForceSupabaseSync}
-                    disabled={isSyncingSupa}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
-                    title="Recarregar dados diretamente do Supabase"
-                  >
-                    <Database className={`w-3.5 h-3.5 ${isSyncingSupa ? "animate-pulse text-emerald-600" : ""}`} />
-                    {isSyncingSupa ? "Sincronizando..." : "Sincronizar"}
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setCurrentView("settings");
-                    setShowSupabaseModal(false);
-                  }}
-                  className="w-full py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>Abrir Configurações do Supabase</span>
-                </button>
-              </div>
-            </div>
           )}
-        </div>
+        </button>
 
         {/* Help Circle */}
         <button 
           onClick={() => {
-            alert("Ajuda Gestor de Ativos:\n- Conexão em nuvem ativa com Firebase Firestore e Supabase PostgreSQL.\n- Use o menu lateral para navegar entre telas.\n- Você pode cadastrar, entregar ou devolver notebooks.\n- O estoque de consumíveis atualiza em tempo real.\n- Acesse a tela de Perfil para modificar suas informações.");
+            alert("Ajuda Gestor de Ativos:\n- Conexão em nuvem ativa com Firebase Firestore.\n- Use o menu lateral para navegar entre telas.\n- Você pode cadastrar, entregar ou devolver notebooks.\n- O estoque de consumíveis atualiza em tempo real.\n- Acesse a tela de Perfil para modificar suas informações.");
           }}
           className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors hidden sm:flex cursor-pointer"
           title="Ajuda e Documentação"

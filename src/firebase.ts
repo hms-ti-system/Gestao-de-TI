@@ -340,3 +340,73 @@ export async function clearAllCollectionsAndCreateAdmin(adminUser: any): Promise
   await setDoc(doc(db, "users", id), sanitizeForFirestore(rest));
   console.log("Master Admin user recreated in Firestore successfully!");
 }
+
+// Function to migrate all in-memory or cached data to Firebase Firestore
+export async function migrateDataToFirebase(data: {
+  users?: any[];
+  assets?: any[];
+  licenses?: any[];
+  consumables?: any[];
+  activities?: any[];
+}): Promise<{ success: boolean; message: string; counts?: any }> {
+  try {
+    let uCount = 0;
+    let aCount = 0;
+    let lCount = 0;
+    let cCount = 0;
+    let actCount = 0;
+
+    if (data.users && data.users.length > 0) {
+      const batch = writeBatch(db);
+      data.users.forEach((u) => {
+        batch.set(doc(db, "users", u.id), sanitizeForFirestore(u));
+        uCount++;
+      });
+      await batch.commit();
+    }
+    if (data.assets && data.assets.length > 0) {
+      const batch = writeBatch(db);
+      data.assets.forEach((a) => {
+        batch.set(doc(db, "assets", a.id), sanitizeForFirestore(a));
+        aCount++;
+      });
+      await batch.commit();
+    }
+    if (data.licenses && data.licenses.length > 0) {
+      const batch = writeBatch(db);
+      data.licenses.forEach((l) => {
+        batch.set(doc(db, "licenses", l.id), sanitizeForFirestore(l));
+        lCount++;
+      });
+      await batch.commit();
+    }
+    if (data.consumables && data.consumables.length > 0) {
+      const batch = writeBatch(db);
+      data.consumables.forEach((c) => {
+        batch.set(doc(db, "consumables", c.id), sanitizeForFirestore(c));
+        cCount++;
+      });
+      await batch.commit();
+    }
+    if (data.activities && data.activities.length > 0) {
+      const batch = writeBatch(db);
+      data.activities.forEach((act) => {
+        batch.set(doc(db, "activities", act.id), sanitizeForFirestore(act));
+        actCount++;
+      });
+      await batch.commit();
+    }
+
+    return {
+      success: true,
+      message: `Migração para o Firebase concluída com sucesso (${uCount} usuários, ${aCount} ativos, ${lCount} licenças, ${cCount} consumíveis, ${actCount} atividades).`,
+      counts: { users: uCount, assets: aCount, licenses: lCount, consumables: cCount, activities: actCount }
+    };
+  } catch (error: any) {
+    console.error("Migration to Firebase failed:", error);
+    return {
+      success: false,
+      message: error?.message || "Erro durante a migração para o Firebase Firestore."
+    };
+  }
+}

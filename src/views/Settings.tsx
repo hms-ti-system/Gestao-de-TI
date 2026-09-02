@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { 
   Database, 
@@ -13,25 +13,22 @@ import {
   Trash2,
   AlertTriangle,
   Lock,
-  Copy,
-  Check,
   Zap,
   RefreshCw,
-  LogOut,
   RotateCcw,
-  FileCode
+  Flame,
+  ShieldCheck,
+  Server
 } from "lucide-react";
 
 export const Settings: React.FC = () => {
   const { 
     currentUser, 
-    supabaseConfig,
-    updateSupabaseConfig,
-    supabaseInfo,
-    testSupabaseConnection,
-    migrateToSupabase,
-    supabaseSqlSchema,
-    supabaseRecreateSqlSchema,
+    cloudInfo,
+    firebaseConfig,
+    testFirestoreConnection,
+    migrateToFirebase,
+    deleteSupabaseDatabase,
     recreateAllDatabases,
     forceCloudSync, 
     showToast,
@@ -45,105 +42,61 @@ export const Settings: React.FC = () => {
     activities
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<"supabase_config" | "maintenance">("supabase_config");
+  const [activeTab, setActiveTab] = useState<"firebase_config" | "maintenance">("firebase_config");
   
-  // Supabase state
-  const [supaUrl, setSupaUrl] = useState(supabaseConfig.url || "");
-  const [supaKey, setSupaKey] = useState(supabaseConfig.anonKey || "");
-  const [isTestingSupa, setIsTestingSupa] = useState(false);
-  const [supaTestResult, setSupaTestResult] = useState<any>(supabaseInfo.lastTestResult || null);
+  // Firebase testing and migration states
+  const [isTestingFirebase, setIsTestingFirebase] = useState(false);
+  const [firebaseTestResult, setFirebaseTestResult] = useState<any>(cloudInfo.lastTestResult || null);
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationResult, setMigrationResult] = useState<any>(null);
-  const [copiedSql, setCopiedSql] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Sync inputs when cloud config is fetched or updated
-  useEffect(() => {
-    if (supabaseConfig.url) setSupaUrl(supabaseConfig.url);
-    if (supabaseConfig.anonKey) setSupaKey(supabaseConfig.anonKey);
-  }, [supabaseConfig.url, supabaseConfig.anonKey]);
-
   // Maintenance state
-  const [showClearConfirm, setShowClearConfirm] = useState<"items" | "activities" | "all" | "recreate" | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState<"items" | "activities" | "all" | "recreate" | "delete_supabase" | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
   const isAdminUser = currentUser?.isAdmin || currentUser?.id === "user-admin";
 
-  const handleSaveSupabaseConfig = () => {
-    updateSupabaseConfig({
-      url: supaUrl.trim(),
-      anonKey: supaKey.trim(),
-    });
-    showToast("Configurações Salvas", "As credenciais do Supabase foram salvas com sucesso.", "success");
-  };
-
-  const handleDisconnectSupabase = () => {
-    setSupaUrl("");
-    setSupaKey("");
-    updateSupabaseConfig({
-      url: "",
-      anonKey: "",
-    });
-    setSupaTestResult(null);
-    showToast("Supabase Desconectado", "As credenciais foram removidas. O sistema agora opera em modo de armazenamento local.", "info");
-  };
-
-  const handleTestSupabase = async () => {
-    setIsTestingSupa(true);
-    // Auto-save input first
-    updateSupabaseConfig({
-      url: supaUrl.trim(),
-      anonKey: supaKey.trim(),
-    });
-
+  const handleTestFirebase = async () => {
+    setIsTestingFirebase(true);
     try {
-      const res = await testSupabaseConnection();
-      setSupaTestResult(res);
+      const res = await testFirestoreConnection();
+      setFirebaseTestResult(res);
       showToast(
-        res.success ? "Conexão Supabase Verificada" : "Aviso de Conexão Supabase", 
+        res.success ? "Conexão Firebase Firestore Validada" : "Aviso de Conexão Firebase", 
         res.message, 
         res.success ? "success" : "warning"
       );
+    } catch (err: any) {
+      showToast("Erro de Teste", err?.message || "Falha ao testar conexão com o Firebase.", "warning");
     } finally {
-      setIsTestingSupa(false);
+      setIsTestingFirebase(false);
     }
   };
 
-  const handleRunMigration = async () => {
-    if (!supaUrl || !supaKey) {
-      showToast("Configuração Incompleta", "Por favor, preencha a URL e a Chave Anon do Supabase antes de sincronizar.", "warning");
-      return;
-    }
-
+  const handleRunFirebaseMigration = async () => {
     setIsMigrating(true);
     setMigrationResult(null);
     try {
-      const res = await migrateToSupabase();
+      const res = await migrateToFirebase();
       setMigrationResult(res);
       showToast("Sincronização Concluída", res.message, "success");
-      await handleTestSupabase();
+      await handleTestFirebase();
     } catch (err: any) {
-      showToast("Erro na Sincronização", err?.message || "Houve uma falha ao transferir dados para o Supabase.", "warning");
+      showToast("Erro na Sincronização", err?.message || "Houve uma falha ao transferir dados para o Firebase.", "warning");
       setMigrationResult({ success: false, message: err?.message });
     } finally {
       setIsMigrating(false);
     }
   };
 
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(supabaseSqlSchema);
-    setCopiedSql(true);
-    showToast("Script SQL Copiado", "O script PostgreSQL foi copiado para a sua área de transferência.", "info");
-    setTimeout(() => setCopiedSql(false), 3000);
-  };
-
   const handleForceSync = async () => {
     setIsSyncing(true);
     try {
       await forceCloudSync();
-      showToast("Sincronização Concluída", "Os dados foram recarregados diretamente do Supabase (PostgreSQL).", "success");
+      showToast("Sincronização Concluída", "Os dados foram recarregados diretamente do Firebase Firestore.", "success");
     } catch {
-      showToast("Erro", "Não foi possível sincronizar com o Supabase.", "warning");
+      showToast("Erro", "Não foi possível sincronizar com o Firebase Firestore.", "warning");
     } finally {
       setIsSyncing(false);
     }
@@ -155,21 +108,23 @@ export const Settings: React.FC = () => {
     try {
       if (showClearConfirm === "items") {
         await clearItemTables();
-        showToast("Tabelas Limpas", "As tabelas de ativos, licenças e consumíveis foram zeradas no Supabase.", "info");
+        showToast("Coleções Limpas", "As coleções de ativos, licenças e consumíveis foram zeradas no Firebase.", "info");
       } else if (showClearConfirm === "activities") {
         await clearAllActivities();
-        showToast("Histórico Limpo", "O histórico de atividades foi apagado com sucesso no Supabase.", "info");
+        showToast("Histórico Limpo", "O histórico de atividades foi apagado com sucesso no Firebase.", "info");
       } else if (showClearConfirm === "all") {
         await resetDatabase();
-        showToast("Sistema Reiniciado", "O banco de dados Supabase foi resetado e o usuário admin mestre foi recriado.", "warning");
+        showToast("Sistema Reiniciado", "O banco de dados Firebase Firestore foi resetado e o usuário admin mestre foi recriado.", "warning");
       } else if (showClearConfirm === "recreate") {
         const res = await recreateAllDatabases();
         if (res.success) {
-          showToast("Banco Totalmente Recriado", "Todos os dados anteriores foram excluídos e um novo banco zerado está pronto no Supabase.", "success");
+          showToast("Banco Totalmente Recriado", "Todos os dados anteriores foram excluídos e um novo banco limpo está pronto no Firebase Firestore.", "success");
         }
+      } else if (showClearConfirm === "delete_supabase") {
+        deleteSupabaseDatabase();
       }
       setShowClearConfirm(null);
-      await handleTestSupabase();
+      await handleTestFirebase();
     } catch {
       showToast("Erro", "Falha ao executar operação de manutenção.", "warning");
     } finally {
@@ -182,35 +137,40 @@ export const Settings: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Configurações do Supabase & Banco de Dados</h2>
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2.5">
+            <Flame className="w-6 h-6 text-amber-500 fill-amber-500" />
+            Configurações do Firebase & Banco de Dados
+          </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Gerencie a conexão relacional PostgreSQL do Supabase, estrutura SQL e rotinas de manutenção.
+            Gerencie a conexão de banco de dados NoSQL em nuvem com o Firebase Firestore, sincronização em tempo real e integridade.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleForceSync}
-          disabled={isSyncing}
-          className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold shadow-xs transition-all flex items-center gap-2 cursor-pointer"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-emerald-600" : ""}`} />
-          {isSyncing ? "Sincronizando..." : "Recarregar do Supabase"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleForceSync}
+            disabled={isSyncing}
+            className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-amber-500" : ""}`} />
+            {isSyncing ? "Sincronizando..." : "Recarregar do Firebase"}
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200">
         <button
-          onClick={() => setActiveTab("supabase_config")}
+          onClick={() => setActiveTab("firebase_config")}
           className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === "supabase_config"
-              ? "border-emerald-600 text-emerald-600"
+            activeTab === "firebase_config"
+              ? "border-amber-500 text-amber-600"
               : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
-          <Zap className="w-4 h-4 text-emerald-600" />
-          Conexão Supabase (PostgreSQL)
+          <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
+          Conexão Firebase Firestore (Ativa)
         </button>
 
         <button
@@ -226,180 +186,146 @@ export const Settings: React.FC = () => {
         </button>
       </div>
 
-      {/* TAB 1: Supabase Configuration & Status */}
-      {activeTab === "supabase_config" && (
+      {/* TAB 1: Firebase Firestore Configuration & Status */}
+      {activeTab === "firebase_config" && (
         <div className="space-y-6">
-          {/* Supabase Status Banner */}
-          <div className="bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-sm">
+          {/* Firebase Status Banner */}
+          <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-slate-900 text-white rounded-2xl p-6 sm:p-8 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-full text-xs font-bold">
-                  <Zap className="w-3.5 h-3.5 text-amber-300" />
-                  Banco de Dados Principal: Supabase PostgreSQL
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 bg-white/20 backdrop-blur-md rounded-lg text-xs font-bold flex items-center gap-1.5 border border-white/20">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Firebase Firestore Ativo
+                  </span>
+                  <span className="text-xs text-amber-100 font-medium">Google Cloud Platform</span>
                 </div>
-                <h3 className="text-xl sm:text-2xl font-bold tracking-tight">Supabase Conectado</h3>
-                <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-                  A aplicação opera exclusivamente com persistência relacional PostgreSQL no Supabase. O Firebase foi desconectado.
+                <h3 className="text-xl sm:text-2xl font-bold tracking-tight">
+                  Banco de Dados em Nuvem Conectado
+                </h3>
+                <p className="text-xs text-amber-100 max-w-xl leading-relaxed">
+                  O sistema está configurado para salvar, atualizar e consultar todos os inventários, licenças, consumíveis e usuários diretamente no Firebase Firestore com persistência em tempo real.
                 </p>
               </div>
-              
-              <div className="text-right shrink-0 bg-white/10 p-4 rounded-xl border border-white/10">
-                <span className="text-xs text-emerald-200 block mb-1 font-semibold">Total de Registros:</span>
-                <div className="text-2xl font-black text-white">
-                  {assets.length + users.length + licenses.length + consumables.length + activities.length}
-                </div>
+
+              <div className="flex flex-col gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleTestFirebase}
+                  disabled={isTestingFirebase}
+                  className="px-5 py-2.5 bg-white hover:bg-amber-50 text-slate-900 font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <RefreshCw className={`w-4 h-4 text-amber-600 ${isTestingFirebase ? "animate-spin" : ""}`} />
+                  {isTestingFirebase ? "Testando Firestore..." : "Testar Conexão Firebase"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRunFirebaseMigration}
+                  disabled={isMigrating}
+                  className="px-5 py-2.5 bg-amber-500/30 hover:bg-amber-500/40 text-white font-bold rounded-xl text-xs border border-white/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Zap className={`w-4 h-4 text-amber-300 ${isMigrating ? "animate-spin" : ""}`} />
+                  {isMigrating ? "Gravando no Firebase..." : "Sincronizar Todos os Dados"}
+                </button>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Step 1: SQL Schema Generator */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
-                    1
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-800">Estrutura SQL (DDL)</h4>
-                    <p className="text-[11px] text-slate-400">Tabelas e Políticas RLS</p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleCopySql}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-all cursor-pointer"
-                >
-                  {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedSql ? "Copiado!" : "Copiar SQL"}</span>
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Abra seu painel do Supabase, clique no menu <strong>SQL Editor</strong>, cole o script abaixo e clique em <strong>RUN</strong>.
-              </p>
-
-              <div className="relative">
-                <pre className="p-3 bg-slate-900 text-slate-200 rounded-xl text-[11px] font-mono overflow-x-auto max-h-48 border border-slate-800 leading-relaxed">
-                  {supabaseSqlSchema}
-                </pre>
-              </div>
-
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span>O script cria as 5 tabelas (<code>users</code>, <code>assets</code>, <code>licenses</code>, <code>consumables</code>, <code>activities</code>) com suporte a JSONB.</span>
-              </div>
-            </div>
-
-            {/* Step 2: Supabase Credentials Setup */}
+          {/* Connection Details Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Step 1: Firebase Project Info */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
-                  2
+                <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 font-bold text-xs flex items-center justify-center">
+                  <Flame className="w-4 h-4 text-amber-600 fill-amber-600" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-slate-800">Credenciais do Supabase</h4>
-                  <p className="text-[11px] text-slate-400">URL e Chave Anon do Projeto</p>
+                  <h4 className="font-bold text-sm text-slate-800">Projeto Firebase</h4>
+                  <p className="text-[11px] text-slate-400">Identificadores do Cloud</p>
                 </div>
               </div>
 
               <div className="space-y-3 text-xs">
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    Project URL (Supabase URL):
-                  </label>
-                  <input
-                    type="text"
-                    value={supaUrl}
-                    onChange={(e) => setSupaUrl(e.target.value)}
-                    placeholder="https://xyzproject.supabase.co"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Encontrado em Project Settings ➔ API</span>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[11px] mb-0.5">Project ID:</span>
+                  <span className="font-mono font-bold text-slate-800 text-[12px] break-all">
+                    {firebaseConfig.projectId || "gen-lang-client-0378416982"}
+                  </span>
                 </div>
-
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    Anon Key (Chave Pública):
-                  </label>
-                  <input
-                    type="password"
-                    value={supaKey}
-                    onChange={(e) => setSupaKey(e.target.value)}
-                    placeholder="eyJhbGciOiJIUzI1NiIsIn..."
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Chave anon / public do Supabase</span>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[11px] mb-0.5">Firestore Database:</span>
+                  <span className="font-mono font-bold text-amber-700 text-[12px] break-all">
+                    {firebaseConfig.firestoreDatabaseId || "ai-studio-assetcentral-5aa2dd0f-b3e1-4c7a-a9d6-49f8b61302b3"}
+                  </span>
                 </div>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[11px] mb-0.5">Modo de Segurança:</span>
+                  <span className="font-semibold text-emerald-700 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Regras Ativas (firestore.rules)
+                  </span>
+                </div>
+              </div>
+            </div>
 
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleSaveSupabaseConfig}
-                    className="flex-1 min-w-[90px] py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all text-xs cursor-pointer"
-                  >
-                    Salvar Dados
-                  </button>
+            {/* Step 2: Connection Status & Latency */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
+                  <Server className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-800">Status da Conexão</h4>
+                  <p className="text-[11px] text-slate-400">Tempo de resposta e integridade</p>
+                </div>
+              </div>
 
-                  <button
-                    type="button"
-                    onClick={handleTestSupabase}
-                    disabled={isTestingSupa}
-                    className="flex-1 min-w-[110px] py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all text-xs shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingSupa ? "animate-spin" : ""}`} />
-                    {isTestingSupa ? "Testando..." : "Testar Conexão"}
-                  </button>
-
-                  {(supaUrl || supaKey) && (
-                    <button
-                      type="button"
-                      onClick={handleDisconnectSupabase}
-                      className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-700 font-bold rounded-xl transition-all text-xs border border-red-200 flex items-center justify-center gap-1.5 cursor-pointer"
-                      title="Desconectar Supabase e limpar credenciais salvas"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Desconectar</span>
-                    </button>
+              <div className="space-y-3 text-xs">
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 leading-relaxed">
+                  <div className="font-bold flex items-center gap-1.5 mb-1 text-emerald-800">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Firebase Firestore Operacional
+                  </div>
+                  <p className="text-[11px] text-emerald-700">
+                    Comunicação direta estabelecida com as coleções no Google Cloud.
+                  </p>
+                  {cloudInfo.latencyMs !== null && (
+                    <span className="block mt-2 font-mono text-[11px] text-emerald-900">
+                      Latência estimada: <strong>{cloudInfo.latencyMs} ms</strong>
+                    </span>
                   )}
                 </div>
 
-                {supaTestResult && (
+                {firebaseTestResult && (
                   <div className={`p-3 rounded-xl border text-xs leading-relaxed ${
-                    supaTestResult.success 
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                    firebaseTestResult.success 
+                      ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
                       : "bg-amber-50 border-amber-200 text-amber-900"
                   }`}>
-                    <div className="font-bold flex items-center gap-1.5 mb-1">
-                      {supaTestResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-amber-600" />}
-                      {supaTestResult.success ? "Conexão Supabase Validada!" : "Aviso de Validação"}
+                    <div className="font-bold flex items-center gap-1.5 mb-0.5">
+                      {firebaseTestResult.success ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />}
+                      {firebaseTestResult.success ? "Conexão Validada com Sucesso" : "Aviso de Conexão"}
                     </div>
-                    <p>{supaTestResult.message}</p>
-                    {supaTestResult.latencyMs > 0 && (
-                      <span className="block mt-1 font-mono text-[11px] text-slate-600">
-                        Latência de resposta: <strong>{supaTestResult.latencyMs} ms</strong>
-                      </span>
-                    )}
+                    <p className="text-[11px]">{firebaseTestResult.message}</p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Step 3: Enviar dados e Contagens */}
+            {/* Step 3: Migration and Persistence */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
-                  3
+                <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center">
+                  <Database className="w-4 h-4 text-purple-600" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-slate-800">Sincronizar Dados</h4>
-                  <p className="text-[11px] text-slate-400">Gravar registros no Supabase</p>
+                  <h4 className="font-bold text-sm text-slate-800">Sincronizar Coleções</h4>
+                  <p className="text-[11px] text-slate-400">Gravar registros no Firestore</p>
                 </div>
               </div>
 
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
-                <span className="font-bold text-slate-700 block">Registros Prontos para Gravação:</span>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
+                <span className="font-bold text-slate-700 block">Coleções Disponíveis:</span>
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div className="flex justify-between bg-white p-2 rounded-lg border border-slate-100">
                     <span className="text-slate-500">Ativos:</span>
@@ -426,12 +352,12 @@ export const Settings: React.FC = () => {
 
               <button
                 type="button"
-                onClick={handleRunMigration}
-                disabled={isMigrating || !supaUrl || !supaKey}
-                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                onClick={handleRunFirebaseMigration}
+                disabled={isMigrating}
+                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-xl text-xs shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Zap className={`w-4 h-4 ${isMigrating ? "animate-spin" : ""}`} />
-                {isMigrating ? "Gravando Registros no Supabase..." : "Salvar Registros no Supabase"}
+                {isMigrating ? "Gravando no Firestore..." : "Sincronizar com Firestore"}
               </button>
 
               {migrationResult && (
@@ -450,12 +376,39 @@ export const Settings: React.FC = () => {
             </div>
           </div>
 
+          {/* Delete Supabase Database Card */}
+          <div className="bg-red-50/70 border-2 border-red-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-red-600 text-white font-black rounded-md text-[10px] uppercase tracking-wider">
+                  Exclusão Solicitada
+                </span>
+                <h4 className="font-bold text-sm text-red-950 flex items-center gap-1.5">
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                  Deletar Conexão e Credenciais do Supabase
+                </h4>
+              </div>
+              <p className="text-xs text-red-900/80 leading-relaxed max-w-2xl">
+                O banco de dados principal agora é exclusivamente o <strong>Firebase Firestore</strong>. Clique no botão ao lado para confirmar a exclusão e descarte de todas as credenciais do Supabase.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowClearConfirm("delete_supabase")}
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Deletar Supabase</span>
+            </button>
+          </div>
+
           {/* Live Count Statistics & User Session */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3">
               <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Registros Atuais na Memória / Supabase
+                <CheckCircle2 className="w-4 h-4 text-amber-500" />
+                Registros Sincronizados no Firebase Firestore
               </h4>
 
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
@@ -495,7 +448,7 @@ export const Settings: React.FC = () => {
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                  <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
                     <Lock className="w-5 h-5" />
                   </div>
                   <div>
@@ -516,8 +469,11 @@ export const Settings: React.FC = () => {
                   </span>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
-                  <span className="text-slate-400 block mb-0.5">Firebase Status:</span>
-                  <span className="font-semibold text-slate-500">Desconectado</span>
+                  <span className="text-slate-400 block mb-0.5">Provedor Ativo:</span>
+                  <span className="font-semibold text-amber-600 flex items-center gap-1.5">
+                    <Flame className="w-3.5 h-3.5 fill-amber-500" />
+                    Firebase Firestore
+                  </span>
                 </div>
               </div>
             </div>
@@ -536,7 +492,7 @@ export const Settings: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-800">Operações de Manutenção & Limpeza</h3>
-                  <p className="text-xs text-slate-400">Controles administrativos de integridade de dados no Supabase</p>
+                  <p className="text-xs text-slate-400">Controles administrativos de integridade de dados no Firebase Firestore</p>
                 </div>
               </div>
 
@@ -545,7 +501,7 @@ export const Settings: React.FC = () => {
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                   Aviso de Segurança
                 </p>
-                As ações de limpeza afetam diretamente as tabelas do Supabase (PostgreSQL).
+                As ações de limpeza afetam diretamente as coleções do Firebase Firestore e a memória local.
               </div>
 
               {isAdminUser ? (
@@ -554,10 +510,10 @@ export const Settings: React.FC = () => {
                     <div>
                       <h5 className="font-bold text-xs text-slate-800 flex items-center gap-2">
                         <Trash2 className="w-4 h-4 text-red-600" />
-                        Zerar Tabelas de Ativos, Licenças e Consumíveis
+                        Zerar Coleções de Ativos, Licenças e Consumíveis
                       </h5>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Apaga todos os registros de equipamentos, licenças e consumíveis no Supabase, mantendo os usuários.
+                        Apaga todos os registros de equipamentos, licenças e consumíveis no Firestore, mantendo os usuários.
                       </p>
                     </div>
                     <button
@@ -575,7 +531,7 @@ export const Settings: React.FC = () => {
                         Limpar Histórico de Atividades e Logs
                       </h5>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Apaga todos os logs e eventos de auditoria passados no Supabase.
+                        Apaga todos os logs e eventos de auditoria passados no Firebase Firestore.
                       </p>
                     </div>
                     <button
@@ -593,7 +549,7 @@ export const Settings: React.FC = () => {
                         Reset Geral do Banco de Dados
                       </h5>
                       <p className="text-[11px] text-red-700 mt-0.5">
-                        Zera todas as tabelas do Supabase e restaura a conta padrão Master 'admin' com senha 'admin'.
+                        Zera todas as coleções do Firebase e restaura a conta padrão Master 'admin' com senha 'admin'.
                       </p>
                     </div>
                     <button
@@ -604,7 +560,7 @@ export const Settings: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Excluir Todos os Bancos e Recriar Novo Banco no Supabase */}
+                  {/* Excluir Todos os Bancos e Recriar Novo Banco no Firebase */}
                   <div className="p-4.5 bg-gradient-to-r from-red-50/90 via-orange-50/70 to-amber-50/80 border-2 border-red-300 rounded-2xl space-y-3 shadow-xs">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                       <div>
@@ -614,26 +570,16 @@ export const Settings: React.FC = () => {
                           </span>
                           <h5 className="font-bold text-sm text-red-950 flex items-center gap-1.5">
                             <RotateCcw className="w-4 h-4 text-red-600" />
-                            Excluir Todos os Bancos & Recriar Novo no Supabase
+                            Excluir Todos os Bancos & Recriar Novo no Firebase
                           </h5>
                         </div>
                         <p className="text-xs text-red-900/85 leading-relaxed max-w-xl">
-                          Exclui completamente todos os dados de equipamentos, licenças, consumíveis, atividades e usuários tanto do <strong>Supabase</strong> quanto do <strong>armazenamento local</strong>. 
+                          Exclui completamente todos os dados de equipamentos, licenças, consumíveis, atividades e usuários tanto do <strong>Firebase Firestore</strong> quanto do <strong>armazenamento local</strong>. 
                           Recria uma base de dados limpa com a estrutura necessária e o usuário mestre padrão (<code>admin</code> / <code>admin</code>).
                         </p>
                       </div>
 
                       <div className="flex flex-wrap sm:flex-nowrap gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={handleCopySql}
-                          className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                          title="Copiar script SQL com DROP TABLE CASCADE e CREATE TABLE"
-                        >
-                          {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
-                          <span>{copiedSql ? "Script Copiado!" : "Copiar SQL (DROP + CREATE)"}</span>
-                        </button>
-
                         <button
                           type="button"
                           onClick={() => setShowClearConfirm("recreate")}
@@ -657,7 +603,7 @@ export const Settings: React.FC = () => {
           <div className="space-y-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-3 text-xs">
               <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                <Layers className="w-4 h-4 text-blue-600" />
+                <Layers className="w-4 h-4 text-amber-600" />
                 Informações da Aplicação
               </h4>
               <div className="space-y-2 text-slate-600">
@@ -667,15 +613,18 @@ export const Settings: React.FC = () => {
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-100">
                   <span>Versão:</span>
-                  <span className="font-semibold text-slate-800">v3.0.0 (Supabase Exclusive)</span>
+                  <span className="font-semibold text-slate-800">v3.5.0 (Firebase Firestore)</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-100">
                   <span>Banco de Dados:</span>
-                  <span className="font-semibold text-emerald-700">Supabase (PostgreSQL)</span>
+                  <span className="font-semibold text-amber-600 flex items-center gap-1">
+                    <Flame className="w-3.5 h-3.5 fill-amber-500" />
+                    Firebase Firestore
+                  </span>
                 </div>
                 <div className="flex justify-between py-1">
-                  <span>Firebase:</span>
-                  <span className="font-semibold text-slate-400">Desconectado</span>
+                  <span>Supabase:</span>
+                  <span className="font-semibold text-red-600">Deletado / Desconectado</span>
                 </div>
               </div>
             </div>
@@ -693,15 +642,16 @@ export const Settings: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold text-base text-slate-900">Confirmar Ação de Manutenção</h3>
-                <p className="text-xs text-slate-500">Esta ação impactará as tabelas do Supabase</p>
+                <p className="text-xs text-slate-500">Esta ação impactará os dados em nuvem</p>
               </div>
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              {showClearConfirm === "items" && "Tem certeza que deseja apagar todos os Ativos, Licenças e Consumíveis cadastrados no Supabase? Esta ação não pode ser desfeita."}
-              {showClearConfirm === "activities" && "Tem certeza que deseja limpar todo o histórico de atividades e logs do sistema no Supabase?"}
-              {showClearConfirm === "all" && "ATENÇÃO: Isso apagará todas as tabelas no Supabase e restaurará apenas a conta do Administrador padrão. Confirma o reset total?"}
-              {showClearConfirm === "recreate" && "ATENÇÃO MÁXIMA: Esta ação EXCLUIRÁ TODOS OS DADOS de todos os bancos de dados (Supabase PostgreSQL e armazenamento local). Em seguida, recriará uma nova base limpa no Supabase com o Administrador Master ('admin' / 'admin'). Tem certeza absoluta que deseja prosseguir?"}
+              {showClearConfirm === "items" && "Tem certeza que deseja apagar todos os Ativos, Licenças e Consumíveis cadastrados no Firebase Firestore? Esta ação não pode ser desfeita."}
+              {showClearConfirm === "activities" && "Tem certeza que deseja limpar todo o histórico de atividades e logs do sistema no Firebase Firestore?"}
+              {showClearConfirm === "all" && "ATENÇÃO: Isso apagará todas as coleções no Firebase Firestore e restaurará apenas a conta do Administrador padrão. Confirma o reset total?"}
+              {showClearConfirm === "recreate" && "ATENÇÃO MÁXIMA: Esta ação EXCLUIRÁ TODOS OS DADOS do Firebase Firestore e do armazenamento local. Em seguida, recriará uma nova base limpa com o Administrador Master ('admin' / 'admin'). Tem certeza absoluta que deseja prosseguir?"}
+              {showClearConfirm === "delete_supabase" && "Tem certeza que deseja excluir e desconectar completamente qualquer resquício ou credencial do banco de dados Supabase? O sistema continuará conectado exclusivamente ao Firebase Firestore."}
             </p>
 
             <div className="flex gap-2.5 pt-2">

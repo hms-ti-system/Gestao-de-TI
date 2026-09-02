@@ -11,7 +11,6 @@ import {
   ArrowRight,
   Sparkles,
   QrCode,
-  FileSpreadsheet,
   PieChart as PieIcon,
   BarChart2,
   ShieldAlert,
