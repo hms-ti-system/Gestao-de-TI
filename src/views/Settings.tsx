@@ -17,8 +17,9 @@ import {
   Check,
   Zap,
   RefreshCw,
-  ShieldAlert,
-  ShieldCheck
+  LogOut,
+  RotateCcw,
+  FileCode
 } from "lucide-react";
 
 export const Settings: React.FC = () => {
@@ -30,6 +31,8 @@ export const Settings: React.FC = () => {
     testSupabaseConnection,
     migrateToSupabase,
     supabaseSqlSchema,
+    supabaseRecreateSqlSchema,
+    recreateAllDatabases,
     forceCloudSync, 
     showToast,
     clearItemTables,
@@ -39,10 +42,7 @@ export const Settings: React.FC = () => {
     assets,
     licenses,
     consumables,
-    activities,
-    isReadOnly,
-    canDelete,
-    canEdit
+    activities
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<"supabase_config" | "maintenance">("supabase_config");
@@ -64,7 +64,7 @@ export const Settings: React.FC = () => {
   }, [supabaseConfig.url, supabaseConfig.anonKey]);
 
   // Maintenance state
-  const [showClearConfirm, setShowClearConfirm] = useState<"items" | "activities" | "all" | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState<"items" | "activities" | "all" | "recreate" | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
   const isAdminUser = currentUser?.isAdmin || currentUser?.id === "user-admin";
@@ -75,6 +75,17 @@ export const Settings: React.FC = () => {
       anonKey: supaKey.trim(),
     });
     showToast("Configurações Salvas", "As credenciais do Supabase foram salvas com sucesso.", "success");
+  };
+
+  const handleDisconnectSupabase = () => {
+    setSupaUrl("");
+    setSupaKey("");
+    updateSupabaseConfig({
+      url: "",
+      anonKey: "",
+    });
+    setSupaTestResult(null);
+    showToast("Supabase Desconectado", "As credenciais foram removidas. O sistema agora opera em modo de armazenamento local.", "info");
   };
 
   const handleTestSupabase = async () => {
@@ -151,6 +162,11 @@ export const Settings: React.FC = () => {
       } else if (showClearConfirm === "all") {
         await resetDatabase();
         showToast("Sistema Reiniciado", "O banco de dados Supabase foi resetado e o usuário admin mestre foi recriado.", "warning");
+      } else if (showClearConfirm === "recreate") {
+        const res = await recreateAllDatabases();
+        if (res.success) {
+          showToast("Banco Totalmente Recriado", "Todos os dados anteriores foram excluídos e um novo banco zerado está pronto no Supabase.", "success");
+        }
       }
       setShowClearConfirm(null);
       await handleTestSupabase();
@@ -163,26 +179,6 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Read-Only Notice Banner */}
-      {isReadOnly && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
-              <ShieldAlert className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="font-bold text-amber-900">Perfil de Visualização Ativo (Somente Leitura)</p>
-              <p className="text-amber-700 mt-0.5 leading-relaxed">
-                Você está autenticado com permissões de consulta. Modificações de conexão, gravação de dados e rotinas de manutenção ou exclusão no Supabase estão desabilitadas.
-              </p>
-            </div>
-          </div>
-          <span className="hidden sm:inline-block px-2.5 py-1 bg-amber-200/70 text-amber-900 font-bold uppercase text-[10px] rounded-md tracking-wider shrink-0">
-            Modo Consulta
-          </span>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -337,11 +333,11 @@ export const Settings: React.FC = () => {
                   <span className="text-[10px] text-slate-400 mt-0.5 block">Chave anon / public do Supabase</span>
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                <div className="flex flex-wrap gap-2 pt-2">
                   <button
                     type="button"
                     onClick={handleSaveSupabaseConfig}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all text-xs cursor-pointer"
+                    className="flex-1 min-w-[90px] py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all text-xs cursor-pointer"
                   >
                     Salvar Dados
                   </button>
@@ -350,11 +346,23 @@ export const Settings: React.FC = () => {
                     type="button"
                     onClick={handleTestSupabase}
                     disabled={isTestingSupa}
-                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all text-xs shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="flex-1 min-w-[110px] py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all text-xs shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isTestingSupa ? "animate-spin" : ""}`} />
                     {isTestingSupa ? "Testando..." : "Testar Conexão"}
                   </button>
+
+                  {(supaUrl || supaKey) && (
+                    <button
+                      type="button"
+                      onClick={handleDisconnectSupabase}
+                      className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-700 font-bold rounded-xl transition-all text-xs border border-red-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Desconectar Supabase e limpar credenciais salvas"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Desconectar</span>
+                    </button>
+                  )}
                 </div>
 
                 {supaTestResult && (
@@ -595,6 +603,48 @@ export const Settings: React.FC = () => {
                       Reset Geral
                     </button>
                   </div>
+
+                  {/* Excluir Todos os Bancos e Recriar Novo Banco no Supabase */}
+                  <div className="p-4.5 bg-gradient-to-r from-red-50/90 via-orange-50/70 to-amber-50/80 border-2 border-red-300 rounded-2xl space-y-3 shadow-xs">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 bg-red-700 text-white font-black rounded-md text-[10px] uppercase tracking-wider">
+                            Ação Completa
+                          </span>
+                          <h5 className="font-bold text-sm text-red-950 flex items-center gap-1.5">
+                            <RotateCcw className="w-4 h-4 text-red-600" />
+                            Excluir Todos os Bancos & Recriar Novo no Supabase
+                          </h5>
+                        </div>
+                        <p className="text-xs text-red-900/85 leading-relaxed max-w-xl">
+                          Exclui completamente todos os dados de equipamentos, licenças, consumíveis, atividades e usuários tanto do <strong>Supabase</strong> quanto do <strong>armazenamento local</strong>. 
+                          Recria uma base de dados limpa com a estrutura necessária e o usuário mestre padrão (<code>admin</code> / <code>admin</code>).
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap sm:flex-nowrap gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleCopySql}
+                          className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="Copiar script SQL com DROP TABLE CASCADE e CREATE TABLE"
+                        >
+                          {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                          <span>{copiedSql ? "Script Copiado!" : "Copiar SQL (DROP + CREATE)"}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowClearConfirm("recreate")}
+                          className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Excluir & Recriar Banco</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <p className="text-slate-400 italic text-center py-6 text-xs">
@@ -651,6 +701,7 @@ export const Settings: React.FC = () => {
               {showClearConfirm === "items" && "Tem certeza que deseja apagar todos os Ativos, Licenças e Consumíveis cadastrados no Supabase? Esta ação não pode ser desfeita."}
               {showClearConfirm === "activities" && "Tem certeza que deseja limpar todo o histórico de atividades e logs do sistema no Supabase?"}
               {showClearConfirm === "all" && "ATENÇÃO: Isso apagará todas as tabelas no Supabase e restaurará apenas a conta do Administrador padrão. Confirma o reset total?"}
+              {showClearConfirm === "recreate" && "ATENÇÃO MÁXIMA: Esta ação EXCLUIRÁ TODOS OS DADOS de todos os bancos de dados (Supabase PostgreSQL e armazenamento local). Em seguida, recriará uma nova base limpa no Supabase com o Administrador Master ('admin' / 'admin'). Tem certeza absoluta que deseja prosseguir?"}
             </p>
 
             <div className="flex gap-2.5 pt-2">

@@ -1,12 +1,23 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { User, Asset, License, Consumable, Activity, TimelineEvent } from "../types";
 import { firebaseConfig } from "../firebase";
+import { getStoredAccessToken } from "../services/googleAuth";
+import { 
+  fetchCompleteDatabaseFromSheets, 
+  pushCompleteDatabaseToSheets, 
+  testGoogleSheetsApiHandshake,
+  deleteGoogleDriveSpreadsheet,
+  clearStoredSheetsDatabase,
+  HandshakeResult 
+} from "../services/googleSheets";
 import {
   getSavedSupabaseConfig,
   saveSupabaseConfig,
   getActiveDbProvider,
   setActiveDbProvider,
   SUPABASE_SQL_SCHEMA,
+  SUPABASE_RECREATE_DATABASE_SQL,
+  recreateSupabaseDatabase,
   testSupabaseConnection as runTestSupabase,
   migrateDataToSupabase,
   loadDatabaseFromSupabase,
@@ -23,6 +34,39 @@ interface Toast {
   message: string;
   type: "success" | "info" | "warning";
   visible: boolean;
+}
+
+export interface SheetsSyncLogEntry {
+  id: string;
+  timestamp: string; // ISO string
+  type: "pull" | "push" | "handshake" | "auto_sync";
+  status: "success" | "error" | "warning";
+  actionName: string;
+  message: string;
+  details?: string;
+  durationMs?: number;
+  statusCode?: number;
+  endpointTested?: string;
+  itemCounts?: {
+    assets?: number;
+    licenses?: number;
+    consumables?: number;
+    users?: number;
+    activities?: number;
+  };
+  errorDetails?: string;
+}
+
+export interface SheetsSyncState {
+  isSyncing: boolean;
+  lastSync: Date | null;
+  error: string | null;
+  lastItemCounts?: {
+    assets: number;
+    users: number;
+    licenses: number;
+    consumables: number;
+  };
 }
 
 export interface CloudConnectionInfo {
@@ -82,10 +126,8 @@ interface AppContextType {
   testSupabaseConnection: () => Promise<any>;
   migrateToSupabase: () => Promise<{ success: boolean; message: string; transferred?: any }>;
   supabaseSqlSchema: string;
-  isReadOnly: boolean;
-  canCreate: boolean;
-  canEdit: boolean;
-  canDelete: boolean;
+  supabaseRecreateSqlSchema: string;
+  recreateAllDatabases: () => Promise<{ success: boolean; message: string }>;
   login: (identifier: string, password?: string) => boolean;
   logout: () => void;
   updateUserProfile: (userData: Partial<User>) => void;
@@ -108,6 +150,25 @@ interface AppContextType {
   clearAllActivities: () => Promise<void>;
   forceCloudSync: () => Promise<void>;
   testConnection: () => Promise<any>;
+  sheetsAutoSyncEnabled: boolean;
+  sheetsAutoSyncInterval: number;
+  sheetsSyncState: SheetsSyncState;
+  setSheetsAutoSyncEnabled: (enabled: boolean) => void;
+  setSheetsAutoSyncInterval: (intervalSeconds: number) => void;
+  syncWithSheets: (silent?: boolean) => Promise<{ success: boolean; message?: string; counts?: any }>;
+  pushToSheets: () => Promise<{ success: boolean; message?: string }>;
+  deleteSheetsDatabase: (deleteFromDrive?: boolean) => Promise<{ success: boolean; message: string }>;
+  sheetsSyncLogs: SheetsSyncLogEntry[];
+  addSheetsSyncLog: (log: Omit<SheetsSyncLogEntry, "id">) => SheetsSyncLogEntry;
+  clearSheetsSyncLogs: () => void;
+  testGoogleSheetsHandshake: () => Promise<HandshakeResult>;
+  importAllFromSheets: (data: {
+    assets?: Asset[];
+    licenses?: License[];
+    consumables?: Consumable[];
+    users?: User[];
+    activities?: Activity[];
+  }) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -122,8 +183,6 @@ const initialUsers: User[] = [
     department: "Design & Inovação",
     location: "Sede Nova York - 12º Andar",
     avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCaEVl7ZYpdPvU_yqwhu2nz1E1pHIwIvTaJu6jX5ZfguzaM5bBinsTchavTA-kNXVzg1XJkH0sEJ5wU0n6_4JUqmTf8ZlzvGZxbaWHxrdhvyauoGl3hHNtxJK6geTv6ETDpuWVJ751pdtMhOtY_Z6voV3XE9dSmeqJSipYMWwpGmj59HEPRzRz5nJd3OlEpRW0TbFBbBnp9MsQbJV2p2ifNg2_NER09Q2RODT5m4UcxkuhWTrvJe9LzbKFlHGQqKiDB0Y68Y3d_x7k",
-    permissionLevel: "standard",
-    isReadOnly: false,
   },
   {
     id: "user-2",
@@ -133,8 +192,6 @@ const initialUsers: User[] = [
     department: "Infraestrutura",
     location: "Sede São Paulo - 4º Andar",
     avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCOGQiMbBQnZlxDCbewZLnAsVeWA7buow4Jb9qIkIzT7HSfR66mvCWU3Oti_snkf90bSx5u8beUkXZaORAPrJWibl--03ftX9A3nMtTtAIGp1UB5nF03O_L7p6RoMCKDG7B7pJaCF-6aN6DbP2i4U3CTL9hOYAAGPZc-7YflzPdKakgVf4NbJ8-kyOabAnkSpVWt5thGQayZNCw4qK10gOd0qPmb38Q8Twei7q_ivYCIbnFHnqQSAIizxoauQfnwIjyIqVdlnKEIr0",
-    permissionLevel: "standard",
-    isReadOnly: false,
   },
   {
     id: "user-3",
@@ -144,22 +201,6 @@ const initialUsers: User[] = [
     department: "Produto",
     location: "Sede Principal",
     avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuBIPbFrB9pdZW6k_JE52kQw8DtTZXW37vYounYCsA1_D1mXFeE6mHwwtvvkN21VtQ0E2sD36CUxBvbDu6baPfCsG8teOU7_htO4yjqxRQcQh6G1_iwE1iAB9B-_BX0KDTFHFPh-zZ8-aEI-twJHk6_7Vt2GiS_Glo6ShD72GEl6Weq-KHaNmcH7EBHdnkqoGRJOo9UbqcoNV3pitKJcWYli9hncg0E6TShtZPqXyJDJ3HTS5KfW7iQszDdZxb_Na6fFo23Z4rVTx5o",
-    permissionLevel: "standard",
-    isReadOnly: false,
-  },
-  {
-    id: "user-viewer",
-    name: "Mariana Costa",
-    email: "auditor@assetcentral.com",
-    username: "visualizador",
-    password: "visualizador",
-    role: "Auditora de TI / Apenas Leitura",
-    department: "Auditoria & Compliance",
-    location: "Sede Principal (HQ)",
-    avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
-    isAdmin: false,
-    isReadOnly: true,
-    permissionLevel: "viewer",
   },
   {
     id: "user-admin",
@@ -172,8 +213,6 @@ const initialUsers: User[] = [
     location: "Sede Principal (HQ)",
     avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCUgS7fDbdjDDbHbn2iIu7i2JpVr8ZV57e7bMCZxI0oW4wvOe1EtGhDwQwGGtmzcXglqhyhWrbNp8MAEWZD4RGKx-DbHh-MUwv_Kh5iLshA6iGla5fFX50Ja_C_UXv7M8tVMmahFmBWAxaFGhE66FPaJSfCOH7R5QGcZDojaRxniHoQAESB2vnzVrW8FluC97ObSf7q3l53iq1ZGa2ZAjL-obKpeDYM1_Uy1lP6Xb2Ba1806vNp00naBpvXJtyhyeXo4Mo-IygrbiU",
     isAdmin: true,
-    isReadOnly: false,
-    permissionLevel: "admin",
   },
 ];
 
@@ -193,26 +232,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem("ac_users");
-    if (saved) {
-      try {
-        const parsed: User[] = JSON.parse(saved);
-        // Ensure user-viewer exists in list
-        if (!parsed.some((u) => u.id === "user-viewer" || u.username === "visualizador" || u.email === "auditor@assetcentral.com")) {
-          const viewerUser = initialUsers.find((u) => u.id === "user-viewer")!;
-          return [...parsed, viewerUser];
-        }
-        return parsed;
-      } catch {
-        return initialUsers;
-      }
-    }
-    return initialUsers;
+    return saved ? JSON.parse(saved) : initialUsers;
   });
-
-  const isReadOnly = Boolean(currentUser?.isReadOnly || currentUser?.permissionLevel === "viewer");
-  const canCreate = !isReadOnly;
-  const canEdit = !isReadOnly;
-  const canDelete = !isReadOnly && Boolean(currentUser?.isAdmin || currentUser?.id === "user-admin");
 
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem("ac_assets");
@@ -242,6 +263,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [toast, setToast] = useState<Toast | null>(null);
+
+  const showToast = useCallback((title: string, message: string, type: "success" | "info" | "warning" = "success") => {
+    const id = Date.now().toString();
+    setToast({ id, title, message, type, visible: true });
+  }, []);
+
+  const hideToast = useCallback(() => {
+    setToast(prev => prev ? { ...prev, visible: false } : null);
+  }, []);
 
   const [dbProvider, setDbProviderState] = useState<"firebase" | "supabase">("supabase");
   const [supabaseConfig, setSupabaseConfigState] = useState<SupabaseConfig>(() => getSavedSupabaseConfig());
@@ -292,29 +322,538 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [cloudInfo, setCloudInfo] = useState<CloudConnectionInfo>({
     status: "offline",
     lastSync: null,
-    databaseId: firebaseConfig.firestoreDatabaseId || "(desconectado)",
+    databaseId: (firebaseConfig as any).firestoreDatabaseId || "(desconectado)",
     projectId: firebaseConfig.projectId || "desconectado",
     latencyMs: null
   });
 
-  // Supabase direct persistence helpers (Firebase disconnected)
+  // Google Sheets Periodic Auto-Sync State & Configuration
+  const [sheetsAutoSyncEnabled, setSheetsAutoSyncEnabledState] = useState<boolean>(() => {
+    const dbId = localStorage.getItem("ac_sheets_db_id");
+    if (!dbId) return false;
+    const saved = localStorage.getItem("ac_sheets_autosync_enabled");
+    return saved !== null ? saved === "true" : false;
+  });
+
+  const [sheetsAutoSyncInterval, setSheetsAutoSyncIntervalState] = useState<number>(() => {
+    const saved = localStorage.getItem("ac_sheets_autosync_interval");
+    return saved ? parseInt(saved, 10) : 30;
+  });
+
+  const [sheetsSyncState, setSheetsSyncState] = useState<SheetsSyncState>({
+    isSyncing: false,
+    lastSync: (() => {
+      const saved = localStorage.getItem("ac_sheets_db_last_sync");
+      return saved ? new Date() : null;
+    })(),
+    error: null,
+  });
+
+  // Google Sheets Synchronization & Handshake Logs (persisted in localStorage)
+  const [sheetsSyncLogs, setSheetsSyncLogs] = useState<SheetsSyncLogEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem("ac_sheets_sync_logs");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn("Failed to load sheets sync logs:", e);
+    }
+    return [];
+  });
+
+  const addSheetsSyncLog = useCallback((log: Omit<SheetsSyncLogEntry, "id">): SheetsSyncLogEntry => {
+    const entry: SheetsSyncLogEntry = {
+      ...log,
+      id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: log.timestamp || new Date().toISOString()
+    };
+    setSheetsSyncLogs(prev => {
+      const updated = [entry, ...prev].slice(0, 30);
+      try {
+        localStorage.setItem("ac_sheets_sync_logs", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    return entry;
+  }, []);
+
+  const clearSheetsSyncLogs = useCallback(() => {
+    setSheetsSyncLogs([]);
+    localStorage.removeItem("ac_sheets_sync_logs");
+  }, []);
+
+  // Handshake verification test function
+  const testGoogleSheetsHandshake = useCallback(async (): Promise<HandshakeResult> => {
+    const token = getStoredAccessToken();
+    const dbId = localStorage.getItem("ac_sheets_db_id") || undefined;
+    const res = await testGoogleSheetsApiHandshake(token || "", dbId);
+
+    addSheetsSyncLog({
+      timestamp: res.timestamp,
+      type: "handshake",
+      status: res.success ? "success" : "error",
+      actionName: "Handshake & Teste de Conexão API",
+      message: res.message,
+      details: res.spreadsheetTitle ? `Planilha: "${res.spreadsheetTitle}" (${res.sheetsCount || 0} abas)` : undefined,
+      durationMs: res.latencyMs,
+      statusCode: res.statusCode,
+      endpointTested: res.endpointTested,
+      errorDetails: res.errorDetails
+    });
+
+    return res;
+  }, [addSheetsSyncLog]);
+
+  // Keep ref to latest data to avoid stale closures
+  const latestDataRef = useRef({ assets, licenses, consumables, users, activities });
+  useEffect(() => {
+    latestDataRef.current = { assets, licenses, consumables, users, activities };
+  }, [assets, licenses, consumables, users, activities]);
+
+  const lastLocalEditTimeRef = useRef<number>(0);
+  const sheetsPushTimerRef = useRef<any>(null);
+
+  const setSheetsAutoSyncEnabled = useCallback((enabled: boolean) => {
+    setSheetsAutoSyncEnabledState(enabled);
+    localStorage.setItem("ac_sheets_autosync_enabled", enabled ? "true" : "false");
+    window.dispatchEvent(new Event("ac-sheets-updated"));
+  }, []);
+
+  const setSheetsAutoSyncInterval = useCallback((intervalSeconds: number) => {
+    setSheetsAutoSyncIntervalState(intervalSeconds);
+    localStorage.setItem("ac_sheets_autosync_interval", intervalSeconds.toString());
+    window.dispatchEvent(new Event("ac-sheets-updated"));
+  }, []);
+
+  // Debounced auto-push to Google Sheets whenever any record is created/edited/deleted
+  const triggerAutoPushToSheets = useCallback(() => {
+    lastLocalEditTimeRef.current = Date.now();
+    const token = getStoredAccessToken();
+    const dbId = localStorage.getItem("ac_sheets_db_id");
+    if (!token || !dbId) return;
+
+    if (sheetsPushTimerRef.current) {
+      clearTimeout(sheetsPushTimerRef.current);
+    }
+
+    sheetsPushTimerRef.current = setTimeout(async () => {
+      const startTime = Date.now();
+      try {
+        const current = latestDataRef.current;
+        setSheetsSyncState(prev => ({ ...prev, isSyncing: true, error: null }));
+
+        const res = await pushCompleteDatabaseToSheets(token, dbId, {
+          assets: current.assets,
+          licenses: current.licenses,
+          consumables: current.consumables,
+          users: current.users,
+          activities: current.activities,
+        });
+
+        const now = new Date();
+        const timeFormatted = now.toLocaleString("pt-BR");
+        localStorage.setItem("ac_sheets_db_last_sync", timeFormatted);
+
+        setSheetsSyncState(prev => ({
+          ...prev,
+          isSyncing: false,
+          lastSync: now,
+          error: null,
+          lastItemCounts: {
+            assets: current.assets.length,
+            users: current.users.length,
+            licenses: current.licenses.length,
+            consumables: current.consumables.length,
+          }
+        }));
+
+        addSheetsSyncLog({
+          timestamp: now.toISOString(),
+          type: "push",
+          status: "success",
+          actionName: "Auto-Push em Segundo Plano",
+          message: `Alterações gravadas no Sheets (${res.updatedTables.join(", ")})`,
+          durationMs: Date.now() - startTime,
+          statusCode: 200,
+          itemCounts: {
+            assets: current.assets.length,
+            licenses: current.licenses.length,
+            consumables: current.consumables.length,
+            users: current.users.length,
+            activities: current.activities.length,
+          }
+        });
+
+        window.dispatchEvent(new Event("ac-sheets-updated"));
+      } catch (err: any) {
+        console.warn("[Auto-Push to Google Sheets error]:", err);
+        setSheetsSyncState(prev => ({ ...prev, isSyncing: false, error: err?.message }));
+        addSheetsSyncLog({
+          timestamp: new Date().toISOString(),
+          type: "push",
+          status: "error",
+          actionName: "Auto-Push em Segundo Plano",
+          message: `Falha na gravação automática: ${err?.message || "Erro desconhecido"}`,
+          errorDetails: err?.message,
+          durationMs: Date.now() - startTime,
+          statusCode: 500,
+        });
+      }
+    }, 1000);
+  }, [addSheetsSyncLog]);
+
+  const syncWithSheets = useCallback(async (silent: boolean = false) => {
+    const token = getStoredAccessToken();
+    const dbId = localStorage.getItem("ac_sheets_db_id");
+    const startTime = Date.now();
+
+    if (!token || !dbId) {
+      if (!silent) {
+        showToast("Google Sheets Não Vinculado", "Conecte sua conta Google e vincule uma planilha para sincronizar.", "warning");
+      }
+      addSheetsSyncLog({
+        timestamp: new Date().toISOString(),
+        type: silent ? "auto_sync" : "pull",
+        status: "warning",
+        actionName: silent ? "Auto-Sync Periódico" : "Sincronização Bidirecional (Pull)",
+        message: "Operação abortada: Token Google ou ID da Planilha não configurados.",
+        errorDetails: "Conecte sua conta Google através do botão de login e selecione uma planilha ativa.",
+        durationMs: Date.now() - startTime,
+        statusCode: 401
+      });
+      return { success: false, message: "Token ou planilha não configurados" };
+    }
+
+    // If local changes were made within the last 6s and this is a background auto-sync, don't overwrite with stale data
+    if (silent && Date.now() - lastLocalEditTimeRef.current < 6000) {
+      return { success: true, message: "Aguardando gravação pendente" };
+    }
+
+    setSheetsSyncState(prev => ({ ...prev, isSyncing: true, error: null }));
+    try {
+      const data = await fetchCompleteDatabaseFromSheets(token, dbId);
+
+      if (data.assets && data.assets.length > 0) {
+        setAssets(data.assets);
+        localStorage.setItem("ac_assets", JSON.stringify(data.assets));
+      }
+      if (data.licenses && data.licenses.length > 0) {
+        setLicenses(data.licenses);
+        localStorage.setItem("ac_licenses", JSON.stringify(data.licenses));
+      }
+      if (data.consumables && data.consumables.length > 0) {
+        setConsumables(data.consumables);
+        localStorage.setItem("ac_consumables", JSON.stringify(data.consumables));
+      }
+      if (data.users && data.users.length > 0) {
+        setUsers(data.users);
+        localStorage.setItem("ac_users", JSON.stringify(data.users));
+      }
+      if (data.activities && data.activities.length > 0) {
+        setActivities(prev => {
+          const existingIds = new Set(prev.map(a => a.id));
+          const newActs = data.activities!.filter(a => !existingIds.has(a.id));
+          return [...newActs, ...prev].slice(0, 100);
+        });
+        localStorage.setItem("ac_activities", JSON.stringify(data.activities));
+      }
+
+      const now = new Date();
+      const timeFormatted = now.toLocaleString("pt-BR");
+      localStorage.setItem("ac_sheets_db_last_sync", timeFormatted);
+
+      setSheetsSyncState({
+        isSyncing: false,
+        lastSync: now,
+        error: null,
+        lastItemCounts: {
+          assets: data.assets?.length || 0,
+          users: data.users?.length || 0,
+          licenses: data.licenses?.length || 0,
+          consumables: data.consumables?.length || 0,
+        }
+      });
+
+      addSheetsSyncLog({
+        timestamp: now.toISOString(),
+        type: silent ? "auto_sync" : "pull",
+        status: "success",
+        actionName: silent ? "Auto-Sync Periódico (Pull)" : "Sincronização Bidirecional (Pull)",
+        message: `Leitura concluída (${Date.now() - startTime}ms): ${data.assets?.length || 0} ativos, ${data.licenses?.length || 0} licenças, ${data.consumables?.length || 0} consumíveis.`,
+        durationMs: Date.now() - startTime,
+        statusCode: 200,
+        itemCounts: {
+          assets: data.assets?.length || 0,
+          users: data.users?.length || 0,
+          licenses: data.licenses?.length || 0,
+          consumables: data.consumables?.length || 0,
+          activities: data.activities?.length || 0,
+        }
+      });
+
+      window.dispatchEvent(new Event("ac-sheets-updated"));
+
+      if (!silent) {
+        showToast(
+          "Sincronização Google Sheets",
+          `Base atualizada em tempo real: ${data.assets?.length || 0} ativos, ${data.licenses?.length || 0} licenças, ${data.consumables?.length || 0} consumíveis.`,
+          "success"
+        );
+      }
+
+      return {
+        success: true,
+        counts: {
+          assets: data.assets?.length || 0,
+          users: data.users?.length || 0,
+          licenses: data.licenses?.length || 0,
+          consumables: data.consumables?.length || 0,
+        }
+      };
+    } catch (err: any) {
+      console.warn("[Sheets Periodic Sync Error]:", err?.message);
+      setSheetsSyncState(prev => ({
+        ...prev,
+        isSyncing: false,
+        error: err?.message || "Falha na sincronização"
+      }));
+
+      addSheetsSyncLog({
+        timestamp: new Date().toISOString(),
+        type: silent ? "auto_sync" : "pull",
+        status: "error",
+        actionName: silent ? "Auto-Sync Periódico (Pull)" : "Sincronização Bidirecional (Pull)",
+        message: `Falha ao ler dados do Sheets: ${err?.message || "Erro na API"}`,
+        errorDetails: err?.message,
+        durationMs: Date.now() - startTime,
+        statusCode: err?.statusCode || 500
+      });
+
+      if (!silent) {
+        showToast("Erro na Sincronização Google Sheets", err?.message || "Falha ao ler dados da planilha.", "warning");
+      }
+      return { success: false, message: err?.message };
+    }
+  }, [showToast, addSheetsSyncLog]);
+
+  const pushToSheets = useCallback(async () => {
+    const token = getStoredAccessToken();
+    const dbId = localStorage.getItem("ac_sheets_db_id");
+    const startTime = Date.now();
+
+    if (!token || !dbId) {
+      showToast("Google Sheets Não Conectado", "Conecte sua conta Google e selecione a planilha para exportar.", "warning");
+      addSheetsSyncLog({
+        timestamp: new Date().toISOString(),
+        type: "push",
+        status: "warning",
+        actionName: "Gravação Manual Completa (Push)",
+        message: "Operação abortada: Conta Google não conectada ou planilha não definida.",
+        durationMs: Date.now() - startTime,
+        statusCode: 401
+      });
+      return { success: false, message: "Não conectado" };
+    }
+
+    if (sheetsPushTimerRef.current) {
+      clearTimeout(sheetsPushTimerRef.current);
+    }
+
+    setSheetsSyncState(prev => ({ ...prev, isSyncing: true, error: null }));
+    try {
+      const current = latestDataRef.current;
+      const res = await pushCompleteDatabaseToSheets(token, dbId, {
+        assets: current.assets,
+        licenses: current.licenses,
+        consumables: current.consumables,
+        users: current.users,
+        activities: current.activities
+      });
+
+      const now = new Date();
+      const timeFormatted = now.toLocaleString("pt-BR");
+      localStorage.setItem("ac_sheets_db_last_sync", timeFormatted);
+
+      setSheetsSyncState(prev => ({
+        ...prev,
+        isSyncing: false,
+        lastSync: now,
+        error: null,
+        lastItemCounts: {
+          assets: current.assets.length,
+          users: current.users.length,
+          licenses: current.licenses.length,
+          consumables: current.consumables.length,
+        }
+      }));
+
+      addSheetsSyncLog({
+        timestamp: now.toISOString(),
+        type: "push",
+        status: "success",
+        actionName: "Gravação Manual Completa (Push)",
+        message: `Todas as tabelas foram gravadas na planilha (${res.updatedTables.join(", ")}).`,
+        durationMs: Date.now() - startTime,
+        statusCode: 200,
+        itemCounts: {
+          assets: current.assets.length,
+          licenses: current.licenses.length,
+          consumables: current.consumables.length,
+          users: current.users.length,
+          activities: current.activities.length,
+        }
+      });
+
+      window.dispatchEvent(new Event("ac-sheets-updated"));
+      showToast("Google Sheets Atualizado", `Base de dados gravada com sucesso (${res.updatedTables.join(", ")}).`, "success");
+      return { success: true };
+    } catch (err: any) {
+      console.error("Push to sheets failed:", err);
+      setSheetsSyncState(prev => ({ ...prev, isSyncing: false, error: err?.message }));
+      
+      addSheetsSyncLog({
+        timestamp: new Date().toISOString(),
+        type: "push",
+        status: "error",
+        actionName: "Gravação Manual Completa (Push)",
+        message: `Erro ao gravar dados no Sheets: ${err?.message || "Falha na API"}`,
+        errorDetails: err?.message,
+        durationMs: Date.now() - startTime,
+        statusCode: 500
+      });
+
+      showToast("Falha ao Gravar no Sheets", err?.message || "Erro ao gravar dados na planilha.", "warning");
+      return { success: false, message: err?.message };
+    }
+  }, [showToast, addSheetsSyncLog]);
+
+  // Periodic Auto-Sync Timer for Google Sheets
+  useEffect(() => {
+    if (!sheetsAutoSyncEnabled) return;
+
+    let isMounted = true;
+
+    const executePeriodicSync = () => {
+      if (!isMounted) return;
+      const token = getStoredAccessToken();
+      const dbId = localStorage.getItem("ac_sheets_db_id");
+      if (token && dbId && Date.now() - lastLocalEditTimeRef.current > 5000) {
+        syncWithSheets(true);
+      }
+    };
+
+    const intervalMs = Math.max(10, sheetsAutoSyncInterval) * 1000;
+    const intervalTimer = setInterval(executePeriodicSync, intervalMs);
+
+    const onWindowFocusSheets = () => {
+      executePeriodicSync();
+    };
+
+    window.addEventListener("focus", onWindowFocusSheets);
+    document.addEventListener("visibilitychange", onWindowFocusSheets);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalTimer);
+      window.removeEventListener("focus", onWindowFocusSheets);
+      document.removeEventListener("visibilitychange", onWindowFocusSheets);
+    };
+  }, [sheetsAutoSyncEnabled, sheetsAutoSyncInterval, syncWithSheets]);
+
+  // Purge any pre-existing Google Sheets database configuration on app load as requested
+  useEffect(() => {
+    const existingDbId = localStorage.getItem("ac_sheets_db_id");
+    if (existingDbId) {
+      clearStoredSheetsDatabase();
+      setSheetsAutoSyncEnabledState(false);
+      setSheetsSyncLogs([]);
+      setSheetsSyncState({
+        isSyncing: false,
+        lastSync: null,
+        error: null,
+      });
+    }
+  }, []);
+
+  // Delete & unlink Google Sheets database
+  const deleteSheetsDatabase = useCallback(async (deleteFromDrive: boolean = true): Promise<{ success: boolean; message: string }> => {
+    const token = getStoredAccessToken();
+    const dbId = localStorage.getItem("ac_sheets_db_id");
+    const dbName = localStorage.getItem("ac_sheets_db_name") || "Base Google Sheets";
+
+    let driveMsg = "";
+    if (token && dbId && deleteFromDrive) {
+      try {
+        const driveResult = await deleteGoogleDriveSpreadsheet(token, dbId);
+        driveMsg = driveResult.message;
+      } catch (err: any) {
+        console.warn("Could not delete file directly from Google Drive:", err);
+        driveMsg = "Arquivo local desvinculado.";
+      }
+    }
+
+    // Clear local storage keys
+    clearStoredSheetsDatabase();
+
+    // Reset local states and auto-sync
+    setSheetsAutoSyncEnabledState(false);
+    localStorage.setItem("ac_sheets_autosync_enabled", "false");
+    setSheetsSyncLogs([]);
+    setSheetsSyncState({
+      isSyncing: false,
+      lastSync: null,
+      error: null,
+    });
+
+    // Record audit activity
+    const newActivity: Activity = {
+      id: `act-${Date.now()}`,
+      title: "Desvinculação e Exclusão de Base Google Sheets",
+      action: "Exclusão de Base",
+      target: dbName,
+      user: currentUser ? currentUser.name : "Administrador",
+      time: "Agora mesmo",
+      type: "administrativo",
+      category: "Google Sheets",
+      details: driveMsg || "Base de dados desvinculada do sistema.",
+    };
+    setActivities(prev => [newActivity, ...prev]);
+
+    showToast(
+      "Base Google Sheets Excluída",
+      `A base de dados do Google Sheets foi removida e desvinculada do sistema. ${driveMsg}`.trim(),
+      "info"
+    );
+
+    return {
+      success: true,
+      message: `Base de dados do Google Sheets excluída com sucesso. ${driveMsg}`.trim()
+    };
+  }, [currentUser, showToast]);
+
+  // Direct persistence helpers (Supabase + Google Sheets)
   const persistSave = useCallback(async (collectionName: string, item: any) => {
+    lastLocalEditTimeRef.current = Date.now();
+    triggerAutoPushToSheets();
     try {
       // Save directly to Supabase
       await saveDocumentToSupabase(collectionName, item);
     } catch (err) {
       console.warn(`[Supabase Cloud] Falha ao salvar em ${collectionName}:`, err);
     }
-  }, []);
+  }, [triggerAutoPushToSheets]);
 
   const persistDelete = useCallback(async (collectionName: string, id: string) => {
+    lastLocalEditTimeRef.current = Date.now();
+    triggerAutoPushToSheets();
     try {
       // Delete directly from Supabase
       await deleteDocumentFromSupabase(collectionName, id);
     } catch (err) {
       console.warn(`[Supabase Cloud] Falha ao excluir ${collectionName}/${id}:`, err);
     }
-  }, []);
+  }, [triggerAutoPushToSheets]);
 
   // Sync state to local storage
   useEffect(() => {
@@ -442,17 +981,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [supabaseConfig.url, supabaseConfig.anonKey, testSupabaseConnection]);
 
-  const showToast = (title: string, message: string, type: "success" | "info" | "warning" = "success") => {
-    const id = Date.now().toString();
-    setToast({ id, title, message, type, visible: true });
-  };
-
-  const hideToast = () => {
-    if (toast) {
-      setToast({ ...toast, visible: false });
-    }
-  };
-
   // Auth Operations
   const login = (identifier: string, password?: string): boolean => {
     const match = users.find((u) => 
@@ -487,10 +1015,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add User
   const addUser = (userData: Omit<User, "id">) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Criação de usuários não permitida.", "warning");
-      return;
-    }
     const id = "user-" + Math.floor(Math.random() * 9000 + 1000);
     const newUser: User = {
       ...userData,
@@ -518,10 +1042,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Update User
   const updateUser = (id: string, updatedData: Partial<User>) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Edição de usuários não permitida.", "warning");
-      return;
-    }
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === id) {
@@ -540,10 +1060,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Delete User
   const deleteUser = (id: string) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Exclusão não permitida.", "warning");
-      return;
-    }
     const userToDelete = users.find((u) => u.id === id);
     if (!userToDelete) return;
 
@@ -611,10 +1127,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     returnDate?: string,
     notes?: string
   ) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Check-out de ativos não permitido.", "warning");
-      return;
-    }
     const userObj = users.find((u) => u.id === userId) || users[0];
     
     setAssets((prev) =>
@@ -667,10 +1179,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     location: string,
     notes: string
   ) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Check-in de ativos não permitido.", "warning");
-      return;
-    }
     const prevAsset = assets.find((a) => a.id === assetId);
     const prevUser = prevAsset?.assignedToUser;
 
@@ -720,10 +1228,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Run Diagnostics
   const runDiagnostics = (assetId: string) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização.", "warning");
-      return;
-    }
     setAssets((prev) =>
       prev.map((a) => {
         if (a.id === assetId) {
@@ -751,10 +1255,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Checkout Consumable
   const checkoutConsumable = (id: string) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Retirada de itens não permitida.", "warning");
-      return;
-    }
     let triggeredCritical = false;
     let name = "";
 
@@ -810,10 +1310,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add Consumable
   const addConsumable = (consumable: Omit<Consumable, "id" | "status">) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Criação de consumíveis não permitida.", "warning");
-      return;
-    }
     const id = "C-" + (consumables.length + 1);
     const ratio = consumable.quantityRemaining / consumable.quantityTotal;
     let status: Consumable["status"] = "Disponível";
@@ -834,10 +1330,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add License
   const addLicense = (license: Omit<License, "id">) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização. Cadastro de licenças não permitido.", "warning");
-      return;
-    }
     const id = "LIC-" + (2024 + licenses.length).toString() + "-" + Math.floor(Math.random() * 900 + 100);
     const newItem: License = {
       ...license,
@@ -850,10 +1342,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Add Asset
   const addAsset = (asset: Omit<Asset, "id" | "health">) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização (sem permissão de CREATE, UPDATE ou DELETE).", "warning");
-      return;
-    }
     const id = "ASSET-" + Math.floor(Math.random() * 9000 + 1000);
     const now = new Date();
     const nowIso = now.toISOString();
@@ -886,10 +1374,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Update Asset
   const updateAsset = (id: string, updatedData: Partial<Asset>) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização (sem permissão de CREATE, UPDATE ou DELETE).", "warning");
-      return;
-    }
     const now = new Date();
     const formattedDate = now.toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" });
     const formattedTime = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -940,10 +1424,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Delete Asset
   const deleteAsset = (id: string) => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Seu perfil possui permissão apenas de visualização (sem permissão de CREATE, UPDATE ou DELETE).", "warning");
-      return;
-    }
     const assetToDelete = assets.find((a) => a.id === id);
     if (!assetToDelete) return;
 
@@ -967,10 +1447,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetDatabase = async () => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Apenas administradores podem redefinir o banco de dados.", "warning");
-      return;
-    }
     const adminUser = {
       id: "user-admin",
       name: "Admin Global",
@@ -1012,10 +1488,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearItemTables = async () => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Apenas administradores podem limpar as tabelas.", "warning");
-      return;
-    }
     try {
       await clearSupabaseTables(["assets", "licenses", "consumables", "activities"]);
       setAssets([]);
@@ -1034,10 +1506,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearAllActivities = async () => {
-    if (isReadOnly) {
-      showToast("Acesso Restrito", "Apenas administradores podem apagar o histórico de atividades.", "warning");
-      return;
-    }
     try {
       await clearSupabaseTables(["activities"]);
       setActivities([]);
@@ -1046,6 +1514,130 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err) {
       console.error("Failed to clear activities:", err);
       showToast("Erro ao Limpar", "Houve uma falha ao apagar o histórico de atividades no Supabase.", "warning");
+    }
+  };
+
+  const recreateAllDatabases = async (): Promise<{ success: boolean; message: string }> => {
+    const adminUser: User = {
+      id: "user-admin",
+      name: "Admin Global",
+      email: "admin@assetcentral.com",
+      username: "admin",
+      password: "admin",
+      role: "Gestor de Ativos TI",
+      department: "Tecnologia da Informação",
+      location: "Sede Principal (HQ)",
+      avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCUgS7fDbdjDDbHbn2iIu7i2JpVr8ZV57e7bMCZxI0oW4wvOe1EtGhDwQwGGtmzcXglqhyhWrbNp8MAEWZD4RGKx-DbHh-MUwv_Kh5iLshA6iGla5fFX50Ja_C_UXv7M8tVMmahFmBWAxaFGhE66FPaJSfCOH7R5QGcZDojaRxniHoQAESB2vnzVrW8FluC97ObSf7q3l53iq1ZGa2ZAjL-obKpeDYM1_Uy1lP6Xb2Ba1806vNp00naBpvXJtyhyeXo4Mo-IygrbiU",
+      isAdmin: true,
+    };
+
+    const initialActivity: Activity = {
+      id: `act-init-${Date.now()}`,
+      title: "Novo Banco de Dados Criado no Supabase",
+      user: "Admin Global",
+      action: "Inicialização",
+      target: "Supabase PostgreSQL",
+      details: "Todas as tabelas antigas foram excluídas e recriadas com estrutura limpa.",
+      time: "Agora mesmo",
+      type: "sistema",
+      category: "Banco de Dados",
+    };
+
+    try {
+      // 1. Wipe and re-seed Supabase instance
+      const supaResult = await recreateSupabaseDatabase(adminUser);
+
+      // 2. Wipe all local storage databases and caches
+      localStorage.setItem("ac_user", JSON.stringify(adminUser));
+      localStorage.setItem("ac_users", JSON.stringify([adminUser]));
+      localStorage.setItem("ac_assets", JSON.stringify([]));
+      localStorage.setItem("ac_licenses", JSON.stringify([]));
+      localStorage.setItem("ac_consumables", JSON.stringify([]));
+      localStorage.setItem("ac_activities", JSON.stringify([initialActivity]));
+      localStorage.removeItem("ac_sheets_sync_logs");
+
+      // 3. Reset in-memory React states
+      setUsers([adminUser]);
+      setAssets([]);
+      setLicenses([]);
+      setConsumables([]);
+      setActivities([initialActivity]);
+      setCurrentUser(adminUser);
+      setSheetsSyncLogs([]);
+
+      // 4. Update Supabase live info
+      await testSupabaseConnection();
+
+      showToast(
+        "Bancos de Dados Excluídos & Recriados",
+        supaResult.success
+          ? "Todas as tabelas anteriores foram zeradas e um novo banco limpo foi estabelecido no Supabase!"
+          : "Armazenamento local zerado. Para o Supabase, execute o script SQL caso as tabelas precisem ser recriadas.",
+        supaResult.success ? "success" : "warning"
+      );
+
+      return supaResult;
+    } catch (err: any) {
+      console.error("Erro ao recriar banco de dados:", err);
+      showToast("Aviso na Recriação", err?.message || "Falha na comunicação com o Supabase.", "warning");
+      return {
+        success: false,
+        message: err?.message || "Erro desconhecido ao recriar banco de dados.",
+      };
+    }
+  };
+
+  const importAllFromSheets = async (data: {
+    assets?: Asset[];
+    licenses?: License[];
+    consumables?: Consumable[];
+    users?: User[];
+    activities?: Activity[];
+  }) => {
+    try {
+      if (data.assets && data.assets.length > 0) {
+        setAssets(data.assets);
+        localStorage.setItem("ac_assets", JSON.stringify(data.assets));
+      }
+      if (data.licenses && data.licenses.length > 0) {
+        setLicenses(data.licenses);
+        localStorage.setItem("ac_licenses", JSON.stringify(data.licenses));
+      }
+      if (data.consumables && data.consumables.length > 0) {
+        setConsumables(data.consumables);
+        localStorage.setItem("ac_consumables", JSON.stringify(data.consumables));
+      }
+      if (data.users && data.users.length > 0) {
+        setUsers(data.users);
+        localStorage.setItem("ac_users", JSON.stringify(data.users));
+      }
+      if (data.activities && data.activities.length > 0) {
+        setActivities(prev => [...data.activities!, ...prev].slice(0, 100));
+        localStorage.setItem("ac_activities", JSON.stringify(data.activities));
+      }
+
+      // Add a sync activity
+      const syncAct: Activity = {
+        id: `act-sheets-sync-${Date.now()}`,
+        title: "Sincronização Google Sheets",
+        time: "Agora mesmo",
+        user: currentUser?.name || "Administrador",
+        action: "Sincronização Google Sheets",
+        target: "Base de Dados Relacional",
+        category: "Cloud Sync",
+        type: "automatico",
+        details: `Importados ${data.assets?.length || 0} ativos, ${data.licenses?.length || 0} licenças e ${data.consumables?.length || 0} consumíveis da base Google Sheets.`
+      };
+      setActivities(prev => [syncAct, ...prev]);
+
+      showToast(
+        "Base Sincronizada", 
+        `Dados carregados com sucesso do Google Sheets: ${data.assets?.length || 0} ativos, ${data.licenses?.length || 0} licenças, ${data.consumables?.length || 0} consumíveis.`,
+        "success"
+      );
+    } catch (err: any) {
+      console.error("Failed to import from sheets:", err);
+      showToast("Erro de Importação", err?.message || "Falha ao aplicar dados do Google Sheets.", "warning");
     }
   };
 
@@ -1068,10 +1660,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         testSupabaseConnection,
         migrateToSupabase,
         supabaseSqlSchema: SUPABASE_SQL_SCHEMA,
-        isReadOnly,
-        canCreate,
-        canEdit,
-        canDelete,
+        supabaseRecreateSqlSchema: SUPABASE_RECREATE_DATABASE_SQL,
+        recreateAllDatabases,
         login,
         logout,
         updateUserProfile,
@@ -1094,6 +1684,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearAllActivities,
         forceCloudSync,
         testConnection,
+        sheetsAutoSyncEnabled,
+        sheetsAutoSyncInterval,
+        sheetsSyncState,
+        sheetsSyncLogs,
+        addSheetsSyncLog,
+        clearSheetsSyncLogs,
+        testGoogleSheetsHandshake,
+        setSheetsAutoSyncEnabled,
+        setSheetsAutoSyncInterval,
+        syncWithSheets,
+        pushToSheets,
+        deleteSheetsDatabase,
+        importAllFromSheets,
       }}
     >
       {children}

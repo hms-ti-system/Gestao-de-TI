@@ -7,14 +7,14 @@ import {
   Menu, 
   ChevronDown, 
   Laptop, 
-  AlertTriangle,
-  UserCheck,
-  Database,
-  RefreshCw,
-  CheckCircle2,
-  XCircle,
-  Activity as ActivityIcon,
-  ShieldCheck,
+  AlertTriangle, 
+  UserCheck, 
+  Database, 
+  RefreshCw, 
+  CheckCircle2, 
+  XCircle, 
+  Activity as ActivityIcon, 
+  ShieldCheck, 
   Zap
 } from "lucide-react";
 import { Asset } from "../types";
@@ -33,13 +33,14 @@ export const Header: React.FC<HeaderProps> = ({
   const { 
     currentUser, 
     assets, 
+    licenses, 
+    users, 
     consumables, 
     forceCloudSync, 
-    supabaseInfo,
-    supabaseConfig,
-    testSupabaseConnection,
-    showToast,
-    isReadOnly
+    supabaseInfo, 
+    supabaseConfig, 
+    testSupabaseConnection, 
+    showToast 
   } = useApp();
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -200,7 +201,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right Header actions */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-2 sm:gap-2.5">
         {/* Supabase Connection Status Badge */}
         <div ref={supaModalRef} className="relative">
           <button
@@ -227,7 +228,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}></span>
             </span>
             <Zap className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="hidden md:inline">
+            <span className="hidden xl:inline">
               {supabaseInfo.status === "connected"
                 ? "Supabase Conectado"
                 : supabaseInfo.status === "syncing"
@@ -235,6 +236,9 @@ export const Header: React.FC<HeaderProps> = ({
                 : supabaseConfig.url
                 ? "Supabase Offline"
                 : "Supabase Pendente"}
+            </span>
+            <span className="xl:hidden hidden md:inline">
+              {supabaseInfo.status === "connected" ? "Supabase OK" : "Supabase"}
             </span>
             <span className="md:hidden inline text-[11px]">Supabase</span>
           </button>
@@ -358,7 +362,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Help Circle */}
         <button 
           onClick={() => {
-            showToast("Ajuda do Sistema", "O Gestor de Ativos opera integrado ao Supabase PostgreSQL com controle de acesso RBAC. O perfil de visualização permite consulta completa de inventário.", "info");
+            alert("Ajuda Gestor de Ativos:\n- Conexão em nuvem ativa com Firebase Firestore e Supabase PostgreSQL.\n- Use o menu lateral para navegar entre telas.\n- Você pode cadastrar, entregar ou devolver notebooks.\n- O estoque de consumíveis atualiza em tempo real.\n- Acesse a tela de Perfil para modificar suas informações.");
           }}
           className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors hidden sm:flex cursor-pointer"
           title="Ajuda e Documentação"
@@ -423,14 +427,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="h-9 w-9 rounded-full object-cover border border-slate-300"
               />
               <div className="text-left hidden sm:block leading-none">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-xs font-semibold text-slate-800">{currentUser.name}</p>
-                  {isReadOnly && (
-                    <span className="px-1.5 py-0.2 bg-amber-100 text-amber-800 text-[9px] font-bold rounded border border-amber-200 uppercase">
-                      Leitura
-                    </span>
-                  )}
-                </div>
+                <p className="text-xs font-semibold text-slate-800">{currentUser.name}</p>
                 <p className="text-[10px] text-slate-400 mt-0.5">{currentUser.role}</p>
               </div>
               <ChevronDown className="w-4 h-4 text-slate-400 hidden sm:block" />

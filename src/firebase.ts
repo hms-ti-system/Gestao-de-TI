@@ -25,7 +25,7 @@ export const db = initializeFirestore(
     experimentalAutoDetectLongPolling: true,
     ignoreUndefinedProperties: true
   },
-  config.firestoreDatabaseId || undefined
+  (config as any).firestoreDatabaseId || undefined
 );
 
 // Sanitizer to remove undefined values and ensure clean objects for Firestore
@@ -61,7 +61,7 @@ export async function testFirestoreConnection(): Promise<{
   };
 }> {
   const start = performance.now();
-  const dbId = config.firestoreDatabaseId || "(default)";
+  const dbId = (config as any).firestoreDatabaseId || "(default)";
   const projId = config.projectId || "gen-lang-client";
   
   try {

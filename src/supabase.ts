@@ -76,15 +76,22 @@ export function getSupabaseClient(): SupabaseClient | null {
 }
 
 /**
- * Complete SQL Schema script ready for Supabase SQL Editor
+ * Complete SQL Schema script ready for Supabase SQL Editor (DROP & CREATE fresh database)
  */
-export const SUPABASE_SQL_SCHEMA = `-- ====================================================================
--- SCRIPT DE CRIAÇÃO DE TABELAS SUPABASE (POSTGRESQL) - GESTOR DE ATIVOS
--- Cole este script no "SQL Editor" do seu painel Supabase e clique em RUN
+export const SUPABASE_RECREATE_DATABASE_SQL = `-- ====================================================================
+-- SCRIPT DE RECRIACAO TOTAL DO BANCO DE DADOS SUPABASE (POSTGRESQL)
+-- Cole este script no "SQL Editor" do Supabase e clique em RUN
 -- ====================================================================
 
--- 1. TABELA DE USUÁRIOS
-CREATE TABLE IF NOT EXISTS public.users (
+-- 1. EXCLUIR TABELAS ANTERIORES (SE EXISTIREM)
+DROP TABLE IF EXISTS public.activities CASCADE;
+DROP TABLE IF EXISTS public.consumables CASCADE;
+DROP TABLE IF EXISTS public.licenses CASCADE;
+DROP TABLE IF EXISTS public.assets CASCADE;
+DROP TABLE IF EXISTS public.users CASCADE;
+
+-- 2. CRIAR TABELA DE USUÁRIOS
+CREATE TABLE public.users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT NOT NULL,
@@ -99,8 +106,8 @@ CREATE TABLE IF NOT EXISTS public.users (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 2. TABELA DE ATIVOS / EQUIPAMENTOS
-CREATE TABLE IF NOT EXISTS public.assets (
+-- 3. CRIAR TABELA DE ATIVOS / EQUIPAMENTOS
+CREATE TABLE public.assets (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     series_number TEXT,
@@ -119,8 +126,8 @@ CREATE TABLE IF NOT EXISTS public.assets (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 3. TABELA DE LICENÇAS DE SOFTWARE
-CREATE TABLE IF NOT EXISTS public.licenses (
+-- 4. CRIAR TABELA DE LICENÇAS DE SOFTWARE
+CREATE TABLE public.licenses (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     software TEXT NOT NULL,
@@ -135,8 +142,8 @@ CREATE TABLE IF NOT EXISTS public.licenses (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. TABELA DE CONSUMÍVEIS
-CREATE TABLE IF NOT EXISTS public.consumables (
+-- 5. CRIAR TABELA DE CONSUMÍVEIS
+CREATE TABLE public.consumables (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     category TEXT,
@@ -149,8 +156,8 @@ CREATE TABLE IF NOT EXISTS public.consumables (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 5. TABELA DE ATIVIDADES E LOGS
-CREATE TABLE IF NOT EXISTS public.activities (
+-- 6. CRIAR TABELA DE ATIVIDADES E LOGS DE AUDITORIA
+CREATE TABLE public.activities (
     id TEXT PRIMARY KEY,
     title TEXT,
     "user" TEXT,
@@ -164,28 +171,50 @@ CREATE TABLE IF NOT EXISTS public.activities (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- HABILITAR POLÍTICAS DE ACESSO PÚBLICO (ANON KEY)
+-- 7. HABILITAR POLÍTICAS DE ACESSO PÚBLICO (ANON KEY / ROW LEVEL SECURITY)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.licenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.consumables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Acesso Total Anon Users" ON public.users;
 CREATE POLICY "Acesso Total Anon Users" ON public.users FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Acesso Total Anon Assets" ON public.assets;
 CREATE POLICY "Acesso Total Anon Assets" ON public.assets FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Acesso Total Anon Licenses" ON public.licenses;
 CREATE POLICY "Acesso Total Anon Licenses" ON public.licenses FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Acesso Total Anon Consumables" ON public.consumables;
 CREATE POLICY "Acesso Total Anon Consumables" ON public.consumables FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Acesso Total Anon Activities" ON public.activities;
 CREATE POLICY "Acesso Total Anon Activities" ON public.activities FOR ALL USING (true) WITH CHECK (true);
+
+-- 8. INSERIR USUÁRIO ADMINISTRADOR PADRÃO DO SISTEMA (MASTER)
+INSERT INTO public.users (id, name, email, role, department, location, username, password, is_admin, avatar)
+VALUES (
+    'user-admin',
+    'Admin Global',
+    'admin@assetcentral.com',
+    'Gestor de Ativos TI',
+    'Tecnologia da Informação',
+    'Sede Principal (HQ)',
+    'admin',
+    'admin',
+    true,
+    'https://lh3.googleusercontent.com/aida-public/AB6AXuCUgS7fDbdjDDbHbn2iIu7i2JpVr8ZV57e7bMCZxI0oW4wvOe1EtGhDwQwGGtmzcXglqhyhWrbNp8MAEWZD4RGKx-DbHh-MUwv_Kh5iLshA6iGla5fFX50Ja_C_UXv7M8tVMmahFmBWAxaFGhE66FPaJSfCOH7R5QGcZDojaRxniHoQAESB2vnzVrW8FluC97ObSf7q3l53iq1ZGa2ZAjL-obKpeDYM1_Uy1lP6Xb2Ba1806vNp00naBpvXJtyhyeXo4Mo-IygrbiU'
+) ON CONFLICT (id) DO UPDATE SET is_admin = true, password = 'admin';
+
+-- 9. INSERIR ATIVIDADE INICIAL DE RECRIACAO
+INSERT INTO public.activities (id, title, "user", action, target, details, time, type, category)
+VALUES (
+    'act-init-1',
+    'Novo Banco de Dados Criado no Supabase',
+    'Sistema',
+    'Inicialização',
+    'Supabase PostgreSQL',
+    'Novo banco de dados recriado com estrutura limpa e tabelas zeradas.',
+    'Agora mesmo',
+    'sistema',
+    'Banco de Dados'
+);
 `;
+
+export const SUPABASE_SQL_SCHEMA = SUPABASE_RECREATE_DATABASE_SQL;
 
 /**
  * Test live connection to Supabase instance
@@ -649,6 +678,68 @@ export async function clearSupabaseTables(tables: string[]): Promise<boolean> {
   } catch (error) {
     console.error("Erro ao limpar tabelas do Supabase:", error);
     return false;
+  }
+}
+
+/**
+ * Recreate complete database in Supabase:
+ * Wipes all tables, seeds default admin, and logs initialization event.
+ */
+export async function recreateSupabaseDatabase(adminUser: User): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return {
+      success: false,
+      message: "Supabase não configurado. Por favor, preencha a URL e a Chave Anon do projeto.",
+    };
+  }
+
+  try {
+    // 1. Clear all existing data from tables
+    const tables = ["activities", "consumables", "licenses", "assets", "users"];
+    for (const tbl of tables) {
+      try {
+        await client.from(tbl).delete().neq("id", "___non_existent___");
+      } catch (tableErr) {
+        console.warn(`Aviso ao limpar tabela ${tbl}:`, tableErr);
+      }
+    }
+
+    // 2. Re-insert initial master admin user
+    const formattedAdmin = formatUserForSupabase(adminUser);
+    const { error: adminErr } = await client.from("users").upsert(formattedAdmin);
+    if (adminErr) {
+      throw new Error(`Erro ao recriar usuário administrador: ${adminErr.message}`);
+    }
+
+    // 3. Insert initial activity record
+    const initActivity: Activity = {
+      id: `act-init-${Date.now()}`,
+      title: "Novo Banco de Dados Criado no Supabase",
+      user: adminUser.name,
+      action: "Inicialização",
+      target: "Supabase PostgreSQL",
+      details: "Banco de dados recriado e pronto para uso com estrutura zerada.",
+      time: "Agora mesmo",
+      type: "sistema",
+      category: "Banco de Dados",
+    };
+    const formattedAct = formatActivityForSupabase(initActivity);
+    await client.from("activities").upsert(formattedAct);
+
+    return {
+      success: true,
+      message: "Novo banco de dados recriado com sucesso no Supabase! Todas as tabelas anteriores foram zeradas e o usuário administrador mestre foi restaurado.",
+    };
+  } catch (error: any) {
+    console.error("Erro ao recriar banco no Supabase:", error);
+    return {
+      success: false,
+      message: error?.message || "Falha ao recriar banco no Supabase. Se as tabelas foram excluídas no painel, execute o script SQL no SQL Editor do Supabase.",
+    };
   }
 }
 

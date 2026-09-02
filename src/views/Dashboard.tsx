@@ -44,17 +44,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   setCurrentView, 
   setSelectedAssetId 
 }) => {
-  const { 
-    assets, 
-    users, 
-    consumables, 
-    licenses, 
-    activities, 
-    showToast, 
-    clearAllActivities, 
-    isReadOnly, 
-    canDelete 
-  } = useApp();
+  const { assets, users, consumables, licenses, activities, showToast, clearAllActivities } = useApp();
   const currentYear = new Date().getFullYear();
   const todayStr = new Date().toISOString().split("T")[0];
   const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -257,26 +247,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Read-Only Notice Banner */}
-      {isReadOnly && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
-              <ShieldAlert className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="font-bold text-amber-900">Perfil de Visualização Ativo (Somente Leitura)</p>
-              <p className="text-amber-700 mt-0.5 leading-relaxed">
-                Você possui acesso completo para consultar métricas, gráficos, status de inventário e alertas. Ações de criação, alteração ou exclusão de dados estão desabilitadas para este perfil.
-              </p>
-            </div>
-          </div>
-          <span className="hidden sm:inline-block px-2.5 py-1 bg-amber-200/70 text-amber-900 font-bold uppercase text-[10px] rounded-md tracking-wider shrink-0">
-            Apenas Consulta
-          </span>
-        </div>
-      )}
-
       {/* Welcome Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
@@ -693,7 +663,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="font-sans text-base font-bold text-slate-800">Atividades Recentes</h3>
           <div className="flex items-center gap-3">
-            {activities.length > 0 && canDelete && !isReadOnly && (
+            {activities.length > 0 && (
               <button 
                 onClick={async () => {
                   if (confirm("Deseja apagar permanentemente todo o histórico de atividades recentes?")) {

@@ -11,6 +11,7 @@ import { Licenses } from "./views/Licenses";
 import { Users } from "./views/Users";
 import { UserProfileView } from "./views/UserProfileView";
 import { Settings as SettingsView } from "./views/Settings";
+import { GoogleSheetsView } from "./views/GoogleSheetsView";
 import { motion, AnimatePresence } from "motion/react";
 import { X, CheckCircle, AlertTriangle, Info } from "lucide-react";
 
@@ -62,6 +63,8 @@ const MainLayout: React.FC = () => {
         return <Consumables />;
       case "licenses":
         return <Licenses />;
+      case "sheets":
+        return <GoogleSheetsView />;
       case "users":
         return <Users />;
       case "profile":
