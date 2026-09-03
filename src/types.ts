@@ -30,12 +30,13 @@ export interface Asset {
   storage?: string;
   os?: string;
   macAddress?: string;
-  createdAt?: string; // Data de registro do ativo
-  registrationDate?: string;
-  purchaseDate?: string;
+  invoiceNumber?: string; // Número da Nota Fiscal (NF)
+  createdAt?: string; // Data de registro automático do ativo
+  registrationDate?: string; // Data de cadastro (automática)
+  purchaseDate?: string; // Data de compra do ativo
   supplier?: string;
   cost?: string;
-  warrantyDate?: string;
+  warrantyDate?: string; // Data de validade da garantia
   health: number; // 0-100
   battery?: string; // "Boa" | "Excelente" | "Substituir"
   cmId?: string;

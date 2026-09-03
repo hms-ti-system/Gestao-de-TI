@@ -29,7 +29,7 @@ const MainLayout: React.FC = () => {
       }, 4000);
       return () => clearTimeout(timer);
     }
-  }, [toast, hideToast]);
+  }, [toast?.visible, toast?.id, hideToast]);
 
   if (!currentUser) {
     return <Login />;

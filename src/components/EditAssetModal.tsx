@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Asset, User } from "../types";
 import { useApp } from "../context/AppContext";
 import { ImageViewerModal } from "./ImageViewerModal";
+import { AssetTagModal } from "./AssetTagModal";
 
 interface EditAssetModalProps {
   isOpen: boolean;
@@ -54,18 +55,20 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
   const [ram, setRam] = useState(asset.ram || "");
   const [storage, setStorage] = useState(asset.storage || "");
   const [os, setOs] = useState(asset.os || "");
+  const [macAddress, setMacAddress] = useState(asset.macAddress || "");
   
   const [batteryReplacedDate, setBatteryReplacedDate] = useState(asset.batteryLastReplaced || "");
   const [batteryNextDate, setBatteryNextDate] = useState(asset.batteryNextReplacement || "");
   
   const [cost, setCost] = useState(asset.cost || "");
   const [supplier, setSupplier] = useState(asset.supplier || "");
-  const [registrationDate, setRegistrationDate] = useState(
-    asset.registrationDate || (asset.createdAt ? asset.createdAt.split("T")[0] : asset.purchaseDate || "")
-  );
+  const [invoiceNumber, setInvoiceNumber] = useState(asset.invoiceNumber || "");
+  const [purchaseDate, setPurchaseDate] = useState(asset.purchaseDate || "");
+  const [warrantyDate, setWarrantyDate] = useState(asset.warrantyDate || "");
   const [image, setImage] = useState(asset.image || "");
   const [description, setDescription] = useState(asset.description || "");
 
+  const [showTagModal, setShowTagModal] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; subtitle?: string } | null>(null);
 
@@ -84,13 +87,14 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
       setRam(asset.ram || "");
       setStorage(asset.storage || "");
       setOs(asset.os || "");
+      setMacAddress(asset.macAddress || "");
       setBatteryReplacedDate(asset.batteryLastReplaced || "");
       setBatteryNextDate(asset.batteryNextReplacement || "");
       setCost(asset.cost || "");
       setSupplier(asset.supplier || "");
-      setRegistrationDate(
-        asset.registrationDate || (asset.createdAt ? asset.createdAt.split("T")[0] : asset.purchaseDate || "")
-      );
+      setInvoiceNumber(asset.invoiceNumber || "");
+      setPurchaseDate(asset.purchaseDate || "");
+      setWarrantyDate(asset.warrantyDate || "");
       setImage(asset.image || "");
       setDescription(asset.description || "");
     }
@@ -248,6 +252,10 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
       category: category.trim(),
       seriesNumber: seriesNumber.trim(),
       cmId: cmId.trim() || undefined,
+      macAddress: macAddress.trim() || undefined,
+      invoiceNumber: invoiceNumber.trim() || undefined,
+      purchaseDate: purchaseDate || undefined,
+      warrantyDate: warrantyDate || undefined,
       status: finalStatus,
       assignedToUserId: status === "Atribuído" ? (assignedUserObj?.id || null) : null,
       assignedToUser: status === "Atribuído" ? assignedUserObj : null,
@@ -261,7 +269,6 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
       batteryNextReplacement: hasBatteryCategory(category) ? batteryNextDate || undefined : undefined,
       cost: cost.trim() || undefined,
       supplier: supplier.trim() || undefined,
-      registrationDate: registrationDate || undefined,
     };
 
     updateAsset(asset.id, updatedData);
@@ -619,13 +626,47 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
                 </>
               )}
 
-              {/* Dados Financeiros e de Cadastro */}
+              {/* Conectividade de Rede & MAC */}
               <div className="space-y-1">
-                <label className="font-bold text-slate-500 uppercase tracking-wide">Data de Cadastro / Compra</label>
+                <label className="font-bold text-slate-500 uppercase tracking-wide">Endereço MAC (Físico)</label>
+                <input
+                  type="text"
+                  placeholder="ex: 00:1A:2B:3C:4D:5E"
+                  value={macAddress}
+                  onChange={(e) => setMacAddress(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 font-mono"
+                />
+              </div>
+
+              {/* Número da Nota Fiscal */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-500 uppercase tracking-wide">Número da Nota Fiscal (NF)</label>
+                <input
+                  type="text"
+                  placeholder="ex: NF-e 000.182.904"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 font-mono"
+                />
+              </div>
+
+              {/* Dados Financeiros, Compra e Garantia */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-500 uppercase tracking-wide">Data de Compra</label>
                 <input
                   type="date"
-                  value={registrationDate}
-                  onChange={(e) => setRegistrationDate(e.target.value)}
+                  value={purchaseDate}
+                  onChange={(e) => setPurchaseDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-500 uppercase tracking-wide">Validade da Garantia</label>
+                <input
+                  type="date"
+                  value={warrantyDate}
+                  onChange={(e) => setWarrantyDate(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
                 />
               </div>
@@ -641,7 +682,7 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
                 />
               </div>
 
-              <div className="space-y-1 sm:col-span-2">
+              <div className="space-y-1">
                 <label className="font-bold text-slate-500 uppercase tracking-wide">Fornecedor / Loja</label>
                 <input
                   type="text"
@@ -650,6 +691,19 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
                   onChange={(e) => setSupplier(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
                 />
+              </div>
+
+              {/* Registro automático info */}
+              <div className="space-y-1 sm:col-span-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-center justify-between text-xs">
+                <span className="text-slate-500 font-semibold">
+                  Data de Registro no Sistema:{" "}
+                  <strong className="text-slate-800">
+                    {asset.createdAt
+                      ? new Date(asset.createdAt).toLocaleDateString("pt-BR")
+                      : asset.registrationDate || "Registro Automático"}
+                  </strong>
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">Gravado automaticamente</span>
               </div>
 
               <div className="space-y-1 sm:col-span-2">
@@ -665,25 +719,53 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 sticky bottom-0 bg-white">
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100 sticky bottom-0 bg-white">
               <button
                 type="button"
-                onClick={onClose}
-                className="px-4 py-2 font-bold text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
+                onClick={() => setShowTagModal(true)}
+                className="px-3.5 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
-                Cancelar
+                <Tag className="w-3.5 h-3.5 text-blue-600" />
+                <span>Ver TAG / QR Code</span>
               </button>
-              <button
-                type="submit"
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-md shadow-blue-500/20 active:scale-[0.98] cursor-pointer flex items-center gap-2 text-xs"
-              >
-                <Check className="w-4 h-4" />
-                <span>Salvar Alterações</span>
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 font-bold text-slate-400 hover:text-slate-800 transition-colors cursor-pointer text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-md shadow-blue-500/20 active:scale-[0.98] cursor-pointer flex items-center gap-2 text-xs"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Salvar Alterações</span>
+                </button>
+              </div>
             </div>
           </form>
         </motion.div>
       </div>
+
+      {/* Asset Tag & QR Code Modal */}
+      {showTagModal && (
+        <AssetTagModal
+          isOpen={showTagModal}
+          onClose={() => setShowTagModal(false)}
+          asset={{
+            ...asset,
+            name,
+            manufacturer,
+            model,
+            seriesNumber,
+            macAddress,
+            invoiceNumber,
+          }}
+        />
+      )}
 
       {/* Full screen preview */}
       {previewImage && (

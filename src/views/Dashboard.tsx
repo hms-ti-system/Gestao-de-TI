@@ -391,7 +391,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
               onChange={(e) => setAlertThreshold(Number(e.target.value))}
               className="bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 outline-none cursor-pointer transition-all"
             >
-              <option value={30}>Próximos 30 dias</option>
+              <option value={5}>Próximos 5 dias (Crítico)</option>
+              <option value={10}>Próximos 10 dias (Urgente)</option>
+              <option value={15}>Próximos 15 dias (Atenção)</option>
+              <option value={30}>Próximos 30 dias (Padrão)</option>
               <option value={60}>Próximos 60 dias</option>
               <option value={90}>Próximos 90 dias</option>
             </select>

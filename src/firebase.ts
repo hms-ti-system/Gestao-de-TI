@@ -4,15 +4,22 @@ import {
   collection, 
   doc, 
   setDoc, 
-  getDoc,
+  getDoc, 
   getDocs, 
   updateDoc, 
-  deleteDoc,
-  writeBatch,
-  onSnapshot,
-  Unsubscribe
+  deleteDoc, 
+  writeBatch, 
+  onSnapshot, 
+  Unsubscribe 
 } from "firebase/firestore";
 import config from "../firebase-applet-config.json";
+import { 
+  defaultUsers, 
+  defaultAssets, 
+  defaultLicenses, 
+  defaultConsumables, 
+  defaultActivities 
+} from "./data/defaultData";
 
 export const firebaseConfig = config;
 
@@ -160,12 +167,12 @@ export function subscribeToCollection<T>(
 export async function saveDocument<T extends { id: string }>(collectionName: string, data: T): Promise<boolean> {
   try {
     const cleanData = sanitizeForFirestore(data);
-    await setDoc(doc(db, collectionName, data.id), cleanData);
+    await setDoc(doc(db, collectionName, data.id), cleanData, { merge: true });
     console.log(`[Firestore Cloud] Documento salvo com sucesso em "${collectionName}/${data.id}"`);
     return true;
   } catch (error) {
     console.error(`[Firestore Cloud Error] Falha ao salvar documento em ${collectionName}/${data.id}:`, error);
-    return false;
+    throw error;
   }
 }
 
@@ -179,7 +186,7 @@ export async function updateDocument(collectionName: string, id: string, data: R
     return true;
   } catch (error) {
     console.error(`[Firestore Cloud Error] Falha ao atualizar documento em ${collectionName}/${id}:`, error);
-    return false;
+    throw error;
   }
 }
 
@@ -191,13 +198,17 @@ export async function deleteDocument(collectionName: string, id: string): Promis
     return true;
   } catch (error) {
     console.error(`[Firestore Cloud Error] Falha ao excluir documento de ${collectionName}/${id}:`, error);
-    return false;
+    throw error;
   }
 }
 
 // Helper to load all application collections from Firestore without erasing or resetting saved data
 export async function loadDatabaseFromFirestore(
-  defaultUsers: any[]
+  defaultUsersList?: any[],
+  fallbackAssets?: any[],
+  fallbackLicenses?: any[],
+  fallbackConsumables?: any[],
+  fallbackActivities?: any[]
 ): Promise<{
   users: any[];
   assets: any[];
@@ -206,24 +217,71 @@ export async function loadDatabaseFromFirestore(
   activities: any[];
 }> {
   try {
+    const targetDefaultUsers = defaultUsersList && defaultUsersList.length > 0 ? defaultUsersList : defaultUsers;
+
     // 1. Fetch Users
     let usersList = await getCollectionData<any>("users");
     if (usersList.length === 0) {
       console.log("Users collection is empty in Firestore. Seeding default users...");
       const usersBatch = writeBatch(db);
-      defaultUsers.forEach((u) => {
-        const { id, ...rest } = u;
-        usersBatch.set(doc(db, "users", id), sanitizeForFirestore(rest));
+      targetDefaultUsers.forEach((u) => {
+        usersBatch.set(doc(db, "users", u.id), sanitizeForFirestore(u));
       });
       await usersBatch.commit();
-      usersList = defaultUsers;
+      usersList = targetDefaultUsers;
     }
 
-    // 2. Fetch Assets, Licenses, Consumables, Activities directly from Firestore
-    const assetsList = await getCollectionData<any>("assets");
-    const licensesList = await getCollectionData<any>("licenses");
-    const consumablesList = await getCollectionData<any>("consumables");
-    const activitiesList = await getCollectionData<any>("activities");
+    // 2. Fetch Assets
+    let assetsList = await getCollectionData<any>("assets");
+    if (assetsList.length === 0) {
+      const toSeed = (fallbackAssets && fallbackAssets.length > 0) ? fallbackAssets : defaultAssets;
+      console.log(`Assets collection is empty in Firestore. Seeding ${toSeed.length} assets...`);
+      const assetsBatch = writeBatch(db);
+      toSeed.forEach((a) => {
+        assetsBatch.set(doc(db, "assets", a.id), sanitizeForFirestore(a));
+      });
+      await assetsBatch.commit();
+      assetsList = toSeed;
+    }
+
+    // 3. Fetch Licenses
+    let licensesList = await getCollectionData<any>("licenses");
+    if (licensesList.length === 0) {
+      const toSeed = (fallbackLicenses && fallbackLicenses.length > 0) ? fallbackLicenses : defaultLicenses;
+      console.log(`Licenses collection is empty in Firestore. Seeding ${toSeed.length} licenses...`);
+      const licBatch = writeBatch(db);
+      toSeed.forEach((l) => {
+        licBatch.set(doc(db, "licenses", l.id), sanitizeForFirestore(l));
+      });
+      await licBatch.commit();
+      licensesList = toSeed;
+    }
+
+    // 4. Fetch Consumables
+    let consumablesList = await getCollectionData<any>("consumables");
+    if (consumablesList.length === 0) {
+      const toSeed = (fallbackConsumables && fallbackConsumables.length > 0) ? fallbackConsumables : defaultConsumables;
+      console.log(`Consumables collection is empty in Firestore. Seeding ${toSeed.length} consumables...`);
+      const conBatch = writeBatch(db);
+      toSeed.forEach((c) => {
+        conBatch.set(doc(db, "consumables", c.id), sanitizeForFirestore(c));
+      });
+      await conBatch.commit();
+      consumablesList = toSeed;
+    }
+
+    // 5. Fetch Activities
+    let activitiesList = await getCollectionData<any>("activities");
+    if (activitiesList.length === 0) {
+      const toSeed = (fallbackActivities && fallbackActivities.length > 0) ? fallbackActivities : defaultActivities;
+      console.log(`Activities collection is empty in Firestore. Seeding ${toSeed.length} activities...`);
+      const actBatch = writeBatch(db);
+      toSeed.forEach((act) => {
+        actBatch.set(doc(db, "activities", act.id), sanitizeForFirestore(act));
+      });
+      await actBatch.commit();
+      activitiesList = toSeed;
+    }
 
     console.log(`Firestore data loaded successfully: ${usersList.length} users, ${assetsList.length} assets, ${licensesList.length} licenses, ${consumablesList.length} consumables, ${activitiesList.length} activities.`);
 
@@ -237,11 +295,11 @@ export async function loadDatabaseFromFirestore(
   } catch (error) {
     console.error("Error loading database from Firestore:", error);
     return {
-      users: defaultUsers,
-      assets: [],
-      licenses: [],
-      consumables: [],
-      activities: []
+      users: defaultUsersList || defaultUsers,
+      assets: fallbackAssets || defaultAssets,
+      licenses: fallbackLicenses || defaultLicenses,
+      consumables: fallbackConsumables || defaultConsumables,
+      activities: fallbackActivities || defaultActivities
     };
   }
 }

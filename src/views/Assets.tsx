@@ -17,12 +17,47 @@ import {
   MapPin,
   ClipboardList,
   ZoomIn,
-  FileSpreadsheet
+  FileSpreadsheet,
+  QrCode,
+  Tag,
+  ShieldAlert,
+  Camera
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Asset, User } from "../types";
 import { ImageViewerModal } from "../components/ImageViewerModal";
 import { EditAssetModal } from "../components/EditAssetModal";
+import { QrScannerModal } from "../components/QrScannerModal";
+import { AssetTagModal } from "../components/AssetTagModal";
+import { PhysicalAssetPlaque } from "../components/PhysicalAssetPlaque";
+
+// Helper for warranty expiration alerts (30, 15, 10, 5 days and expired)
+export const getWarrantyAlert = (warrantyDate?: string) => {
+  if (!warrantyDate) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = new Date(warrantyDate + "T00:00:00");
+  if (isNaN(expiry.getTime())) return null;
+  const diffTime = expiry.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) {
+    return { type: "expired", label: "Garantia Vencida", badgeClass: "bg-red-100 text-red-700 border-red-200", days: diffDays };
+  }
+  if (diffDays <= 5) {
+    return { type: "critical", label: `Garantia vence em ${diffDays}d (Crítico)`, badgeClass: "bg-rose-100 text-rose-700 border-rose-200 animate-pulse", days: diffDays };
+  }
+  if (diffDays <= 10) {
+    return { type: "urgent", label: `Garantia vence em ${diffDays}d (10 dias)`, badgeClass: "bg-orange-100 text-orange-700 border-orange-200", days: diffDays };
+  }
+  if (diffDays <= 15) {
+    return { type: "warning", label: `Garantia vence em ${diffDays}d (15 dias)`, badgeClass: "bg-amber-100 text-amber-700 border-amber-200", days: diffDays };
+  }
+  if (diffDays <= 30) {
+    return { type: "notice", label: `Garantia vence em ${diffDays}d (30 dias)`, badgeClass: "bg-yellow-100 text-yellow-800 border-yellow-200", days: diffDays };
+  }
+  return null;
+};
 
 interface AssetsProps {
   setCurrentView: (view: string) => void;
@@ -53,14 +88,23 @@ export const Assets: React.FC<AssetsProps> = ({
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [activeAssetId, setActiveAssetId] = useState("");
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; subtitle?: string } | null>(null);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [showCaptureTagScanner, setShowCaptureTagScanner] = useState(false);
+  const [tagScannedSuccess, setTagScannedSuccess] = useState(false);
+  const [tagModalAsset, setTagModalAsset] = useState<Asset | null>(null);
 
   // Add Asset Form State
+  const [newTagId, setNewTagId] = useState("");
   const [newName, setNewName] = useState("");
   const [newManufacturer, setNewManufacturer] = useState("");
   const [newModel, setNewModel] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newSerial, setNewSerial] = useState("");
   const [newCmId, setNewCmId] = useState("");
+  const [newMacAddress, setNewMacAddress] = useState("");
+  const [newInvoiceNumber, setNewInvoiceNumber] = useState("");
+  const [newPurchaseDate, setNewPurchaseDate] = useState("");
+  const [newWarrantyDate, setNewWarrantyDate] = useState("");
   const [newBatteryReplacedDate, setNewBatteryReplacedDate] = useState("");
   const [newBatteryNextDate, setNewBatteryNextDate] = useState("");
   const [newCpu, setNewCpu] = useState("");
@@ -69,7 +113,6 @@ export const Assets: React.FC<AssetsProps> = ({
   const [newOs, setNewOs] = useState("");
   const [newCost, setNewCost] = useState("");
   const [newSupplier, setNewSupplier] = useState("");
-  const [newRegistrationDate, setNewRegistrationDate] = useState("");
   const [newImage, setNewImage] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -117,12 +160,18 @@ export const Assets: React.FC<AssetsProps> = ({
   };
 
   const resetAddForm = () => {
+    setNewTagId("");
+    setTagScannedSuccess(false);
     setNewName("");
     setNewManufacturer("");
     setNewModel("");
     setNewCategory("");
     setNewSerial("");
     setNewCmId("");
+    setNewMacAddress("");
+    setNewInvoiceNumber("");
+    setNewPurchaseDate("");
+    setNewWarrantyDate("");
     setNewBatteryReplacedDate("");
     setNewBatteryNextDate("");
     setNewCpu("");
@@ -131,13 +180,14 @@ export const Assets: React.FC<AssetsProps> = ({
     setNewOs("");
     setNewCost("");
     setNewSupplier("");
-    setNewRegistrationDate("");
     setNewImage("");
     setNewDescription("");
   };
 
   const handleOpenAddModal = () => {
     resetAddForm();
+    const autoTag = "TAG-" + new Date().getFullYear() + "-" + Math.floor(Math.random() * 9000 + 1000);
+    setNewTagId(autoTag);
     setShowAddModal(true);
   };
 
@@ -246,52 +296,39 @@ export const Assets: React.FC<AssetsProps> = ({
     const isComp = isComputerCategory(newCategory);
     const hasBattery = hasBatteryCategory(newCategory);
     const nowIso = new Date().toISOString();
-    const regDate = newRegistrationDate || nowIso.split("T")[0];
+    const regDate = nowIso.split("T")[0];
+    const generatedTag = newTagId.trim() || ("TAG-" + new Date().getFullYear() + "-" + Math.floor(Math.random() * 9000 + 1000));
 
     addAsset({
-      name: newName,
-      seriesNumber: newSerial,
+      id: generatedTag,
+      name: newName.trim(),
+      seriesNumber: newSerial.trim(),
       cmId: newCmId.trim() || undefined,
-      manufacturer: newManufacturer,
-      model: newModel,
-      category: newCategory,
+      macAddress: newMacAddress.trim() || undefined,
+      invoiceNumber: newInvoiceNumber.trim() || undefined,
+      purchaseDate: newPurchaseDate || undefined,
+      warrantyDate: newWarrantyDate || undefined,
+      manufacturer: newManufacturer.trim(),
+      model: newModel.trim(),
+      category: newCategory.trim(),
       status: "Disponível",
       createdAt: nowIso,
       registrationDate: regDate,
-      purchaseDate: regDate,
-      cpu: isComp ? newCpu : undefined,
-      ram: isComp ? newRam : undefined,
-      storage: isComp ? newStorage : undefined,
-      os: isComp ? newOs : undefined,
+      cpu: isComp ? newCpu.trim() || undefined : undefined,
+      ram: isComp ? newRam.trim() || undefined : undefined,
+      storage: isComp ? newStorage.trim() || undefined : undefined,
+      os: isComp ? newOs.trim() || undefined : undefined,
       batteryLastReplaced: hasBattery ? (newBatteryReplacedDate || undefined) : undefined,
       batteryNextReplacement: hasBattery ? (newBatteryNextDate || undefined) : undefined,
-      cost: newCost,
-      supplier: newSupplier,
-      warrantyDate: "2027-06-24",
+      cost: newCost.trim() || undefined,
+      supplier: newSupplier.trim() || undefined,
       battery: hasBattery ? "Excelente" : undefined,
       linkedAssets: [],
       image: newImage || undefined,
-      description: newDescription || undefined,
+      description: newDescription.trim() || undefined,
     });
     setShowAddModal(false);
-    // Reset Form completely
-    setNewName("");
-    setNewManufacturer("");
-    setNewModel("");
-    setNewCategory("");
-    setNewSerial("");
-    setNewCmId("");
-    setNewBatteryReplacedDate("");
-    setNewBatteryNextDate("");
-    setNewCpu("");
-    setNewRam("");
-    setNewStorage("");
-    setNewOs("");
-    setNewCost("");
-    setNewSupplier("");
-    setNewRegistrationDate("");
-    setNewImage("");
-    setNewDescription("");
+    resetAddForm();
   };
 
   const triggerCheckout = (assetId: string) => {
@@ -346,7 +383,11 @@ export const Assets: React.FC<AssetsProps> = ({
       const headers = [
         "Tag do Ativo (ID)",
         "Nome do Ativo",
-        "Data de Cadastro",
+        "Data de Registro",
+        "Data de Compra",
+        "Nota Fiscal",
+        "Validade da Garantia",
+        "Endereço MAC",
         "CM/ID",
         "Fabricante",
         "Modelo",
@@ -369,14 +410,24 @@ export const Assets: React.FC<AssetsProps> = ({
             ? new Date(asset.createdAt).toLocaleDateString("pt-BR")
             : asset.registrationDate
             ? new Date(asset.registrationDate + "T00:00:00").toLocaleDateString("pt-BR")
-            : asset.purchaseDate
+            : "";
+
+          const purchaseDateFormatted = asset.purchaseDate
             ? new Date(asset.purchaseDate + "T00:00:00").toLocaleDateString("pt-BR")
+            : "";
+
+          const warrantyDateFormatted = asset.warrantyDate
+            ? new Date(asset.warrantyDate + "T00:00:00").toLocaleDateString("pt-BR")
             : "";
 
           const row = [
             asset.id,
             asset.name,
             regDateFormatted,
+            purchaseDateFormatted,
+            asset.invoiceNumber || "",
+            warrantyDateFormatted,
+            asset.macAddress || "",
             asset.cmId || "",
             asset.manufacturer,
             asset.model,
@@ -387,8 +438,8 @@ export const Assets: React.FC<AssetsProps> = ({
             asset.assignedToUser ? asset.assignedToUser.email : "",
             asset.batteryLastReplaced || "",
             asset.batteryNextReplacement || "",
-            asset.cost,
-            asset.supplier
+            asset.cost || "",
+            asset.supplier || ""
           ];
 
           // Escape commas and double quotes
@@ -430,6 +481,14 @@ export const Assets: React.FC<AssetsProps> = ({
           <p className="text-sm text-slate-400 font-medium mt-1">Gerencie e rastreie o ciclo de vida do hardware corporativo.</p>
         </div>
         <div className="flex gap-2.5 flex-wrap">
+          <button 
+            onClick={() => setShowScannerModal(true)}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+            title="Escanear QR Code da TAG do Ativo"
+          >
+            <QrCode className="w-4 h-4 text-blue-400" />
+            <span>Escanear QR Code</span>
+          </button>
           <button 
             onClick={() => setCurrentView("sheets")}
             className="px-3.5 py-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
@@ -616,9 +675,26 @@ export const Assets: React.FC<AssetsProps> = ({
                           )}
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-slate-800 font-bold text-xs">{asset.name}</span>
-                          <span className="text-[10px] text-slate-400 mt-0.5">
-                            Série: {asset.seriesNumber}{asset.cmId ? ` • CM/ID: ${asset.cmId}` : ""}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-slate-800 font-bold text-xs">{asset.name}</span>
+                            {(() => {
+                              const alert = getWarrantyAlert(asset.warrantyDate);
+                              if (alert) {
+                                return (
+                                  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border ${alert.badgeClass}`} title={`Garantia: ${asset.warrantyDate}`}>
+                                    <ShieldAlert className="w-2.5 h-2.5" />
+                                    {alert.label}
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+                          <span className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                            <span>Série: {asset.seriesNumber}{asset.cmId ? ` • CM/ID: ${asset.cmId}` : ""}</span>
+                            {asset.macAddress && (
+                              <span className="font-mono text-slate-500">MAC: {asset.macAddress}</span>
+                            )}
                           </span>
                         </div>
                       </div>
@@ -677,6 +753,13 @@ export const Assets: React.FC<AssetsProps> = ({
                             Devolução
                           </button>
                         )}
+                        <button 
+                          onClick={() => setTagModalAsset(asset)}
+                          className="p-1.5 text-slate-400 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition-colors"
+                          title="Ver / Imprimir Etiqueta TAG e QR Code"
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </button>
                         <button 
                           onClick={() => handleAssetClick(asset.id)}
                           className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-100 transition-colors"
@@ -793,6 +876,127 @@ export const Assets: React.FC<AssetsProps> = ({
                 </div>
               </div>
 
+              {/* TAG Patrimonial e Leitor de Plaqueta QR Code */}
+              <div className="p-4 bg-linear-to-br from-blue-50/90 via-sky-50/50 to-indigo-50/40 rounded-xl border-2 border-blue-200/90 space-y-3 shadow-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-600 text-white rounded-lg shadow-2xs">
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h5 className="font-bold text-slate-800 text-xs">Plaqueta Patrimonial & TAG com QR Code</h5>
+                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[9px] font-bold rounded-full uppercase tracking-wider">
+                          Leitura Automática
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Leia a numeração da plaquetinha física (ex: ISIS 000937) via câmera ou digite manualmente.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTagModalAsset({
+                        id: newTagId || "000937",
+                        name: newName || "Novo Ativo",
+                        manufacturer: newManufacturer || "Fabricante",
+                        model: newModel || "Modelo",
+                        category: newCategory || "Categoria",
+                        seriesNumber: newSerial || "S/N",
+                        macAddress: newMacAddress || undefined,
+                        invoiceNumber: newInvoiceNumber || undefined,
+                        status: "Disponível",
+                        createdAt: new Date().toISOString()
+                      });
+                    }}
+                    className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs"
+                    title="Visualizar a plaqueta estilizada com QR Code"
+                  >
+                    <Tag className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Ver Plaqueta</span>
+                  </button>
+                </div>
+
+                {/* Botão Principal de Leitura da Plaqueta Física */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCaptureTagScanner(true)}
+                    className="flex-1 py-2.5 px-4 bg-linear-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer group"
+                  >
+                    <Camera className="w-4 h-4 text-sky-200 group-hover:scale-110 transition-transform" />
+                    <span>📷 Ler Plaqueta / QR Code (Câmera)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const autoTag = "TAG-" + new Date().getFullYear() + "-" + Math.floor(Math.random() * 9000 + 1000);
+                      setNewTagId(autoTag);
+                      setTagScannedSuccess(false);
+                    }}
+                    className="py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                    title="Gerar código numérico provisório"
+                  >
+                    Gerar Provisório
+                  </button>
+                </div>
+
+                {/* Campo do Código da TAG */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-700 text-[10px] uppercase tracking-wide flex items-center gap-1.5">
+                      <span>Número da TAG (Plaqueta)</span>
+                      {tagScannedSuccess && (
+                        <span className="text-emerald-700 font-bold text-[10px] flex items-center gap-0.5">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Preenchido via Leitura de Plaqueta
+                        </span>
+                      )}
+                    </label>
+                    <span className="text-[10px] text-slate-400">ex: 000937</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      placeholder="ex: 000937 (ou aponte a câmera no botão acima)"
+                      value={newTagId}
+                      onChange={(e) => {
+                        setNewTagId(e.target.value);
+                        setTagScannedSuccess(false);
+                      }}
+                      className={`w-full px-3.5 py-2 rounded-xl text-slate-900 font-mono text-sm font-bold outline-none transition-all ${
+                        tagScannedSuccess 
+                          ? "bg-emerald-50/80 border-2 border-emerald-400 focus:border-emerald-600 text-emerald-950" 
+                          : "bg-white border border-blue-200 focus:border-blue-600"
+                      }`}
+                    />
+                    {newTagId && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-slate-400 uppercase">
+                        TAG Válida
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mini Preview da Plaqueta se tiver número */}
+                {newTagId && (
+                  <div className="pt-1">
+                    <PhysicalAssetPlaque
+                      tagNumber={newTagId}
+                      assetName={newName || "Novo Equipamento"}
+                      companyName="isis"
+                      subTitle="Transportes e Terminais"
+                      size="sm"
+                      showActions={false}
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-500 uppercase tracking-wide">Nome do Ativo</label>
@@ -841,7 +1045,7 @@ export const Assets: React.FC<AssetsProps> = ({
                     placeholder="ex: C02FX5GZMD6R"
                     value={newSerial}
                     onChange={(e) => setNewSerial(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 font-mono"
                   />
                 </div>
                 <div className="space-y-1">
@@ -851,7 +1055,27 @@ export const Assets: React.FC<AssetsProps> = ({
                     placeholder="ex: CM-1049 ou ID Interno"
                     value={newCmId}
                     onChange={(e) => setNewCmId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Endereço MAC (Físico)</label>
+                  <input
+                    type="text"
+                    placeholder="ex: 00:1A:2B:3C:4D:5E"
+                    value={newMacAddress}
+                    onChange={(e) => setNewMacAddress(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Número da Nota Fiscal (NF)</label>
+                  <input
+                    type="text"
+                    placeholder="ex: NF-e 000.182.904"
+                    value={newInvoiceNumber}
+                    onChange={(e) => setNewInvoiceNumber(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 font-mono"
                   />
                 </div>
                 <div className="space-y-1">
@@ -944,11 +1168,20 @@ export const Assets: React.FC<AssetsProps> = ({
                   </>
                 )}
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-500 uppercase tracking-wide">Data de Cadastro</label>
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Data de Compra</label>
                   <input
                     type="date"
-                    value={newRegistrationDate}
-                    onChange={(e) => setNewRegistrationDate(e.target.value)}
+                    value={newPurchaseDate}
+                    onChange={(e) => setNewPurchaseDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Validade da Garantia</label>
+                  <input
+                    type="date"
+                    value={newWarrantyDate}
+                    onChange={(e) => setNewWarrantyDate(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
                   />
                 </div>
@@ -972,6 +1205,14 @@ export const Assets: React.FC<AssetsProps> = ({
                     onChange={(e) => setNewSupplier(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
                   />
+                </div>
+
+                {/* Nota de Registro Automático */}
+                <div className="col-span-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-500 font-semibold">
+                    Data de Registro do Ativo: <strong className="text-slate-800">Automático ({new Date().toLocaleDateString("pt-BR")})</strong>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">Registrado automaticamente pelo sistema</span>
                 </div>
                 <div className="col-span-2 space-y-1">
                   <label className="font-bold text-slate-500 uppercase tracking-wide">Descrição do Ativo</label>
@@ -1233,6 +1474,49 @@ export const Assets: React.FC<AssetsProps> = ({
           imageUrl={previewImage.url}
           title={previewImage.title}
           subtitle={previewImage.subtitle}
+        />
+      )}
+
+      {/* QR Code Scanner Modal (Modo Consulta) */}
+      <QrScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        mode="lookup"
+        onAssetFound={(assetId) => {
+          setShowScannerModal(false);
+          setSelectedAssetId(assetId);
+          setCurrentView("asset-detail");
+        }}
+        onRegisterNewAssetWithTag={(tag) => {
+          setShowScannerModal(false);
+          resetAddForm();
+          setNewTagId(tag);
+          setTagScannedSuccess(true);
+          setShowAddModal(true);
+          showToast("Cadastro Iniciado com Plaqueta", `TAG "${tag}" inserida no formulário. Preencha os dados do ativo.`, "info");
+        }}
+      />
+
+      {/* QR Code Scanner Modal (Modo Captura de Plaqueta no Cadastro) */}
+      <QrScannerModal
+        isOpen={showCaptureTagScanner}
+        onClose={() => setShowCaptureTagScanner(false)}
+        mode="capture"
+        title="Leitor de Plaqueta de Patrimônio"
+        subtitle="Aponte a câmera para o QR Code da plaquetinha física"
+        onTagCaptured={(tag) => {
+          setNewTagId(tag);
+          setTagScannedSuccess(true);
+          setShowCaptureTagScanner(false);
+        }}
+      />
+
+      {/* Asset Tag & QR Code Modal */}
+      {tagModalAsset && (
+        <AssetTagModal
+          isOpen={Boolean(tagModalAsset)}
+          onClose={() => setTagModalAsset(null)}
+          asset={tagModalAsset}
         />
       )}
     </div>

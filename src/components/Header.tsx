@@ -11,9 +11,11 @@ import {
   UserCheck, 
   Database, 
   ShieldCheck,
-  Flame
+  Flame,
+  QrCode
 } from "lucide-react";
 import { Asset } from "../types";
+import { QrScannerModal } from "./QrScannerModal";
 
 interface HeaderProps {
   setMobileOpen: (open: boolean) => void;
@@ -39,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showHeaderScanner, setShowHeaderScanner] = useState(false);
 
   const searchRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -163,6 +166,17 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Header actions */}
       <div className="flex items-center gap-2 sm:gap-2.5">
+        {/* Botão Escanear Plaqueta / QR Code */}
+        <button
+          type="button"
+          onClick={() => setShowHeaderScanner(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs group"
+          title="Escanear Plaqueta Patrimonial / QR Code do Ativo"
+        >
+          <QrCode className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+          <span className="hidden md:inline">Ler Plaqueta</span>
+        </button>
+
         {/* Firebase Connection Status Indicator */}
         <button
           type="button"
@@ -256,6 +270,24 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
       </div>
+
+      {/* Header QR Scanner Modal */}
+      {showHeaderScanner && (
+        <QrScannerModal
+          isOpen={showHeaderScanner}
+          onClose={() => setShowHeaderScanner(false)}
+          mode="lookup"
+          onAssetFound={(assetId) => {
+            setShowHeaderScanner(false);
+            setSelectedAssetId(assetId);
+            setCurrentView("asset-detail");
+          }}
+          onRegisterNewAssetWithTag={(tag) => {
+            setShowHeaderScanner(false);
+            setCurrentView("assets");
+          }}
+        />
+      )}
     </header>
   );
 };

@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { User, Asset, License, Consumable, Activity, TimelineEvent } from "../types";
 import { 
+  defaultUsers, 
+  defaultAssets, 
+  defaultLicenses, 
+  defaultConsumables, 
+  defaultActivities 
+} from "../data/defaultData";
+import { 
   firebaseConfig,
   saveDocument as saveDocumentToFirestore,
   deleteDocument as deleteDocumentFromFirestore,
@@ -112,7 +119,7 @@ interface AppContextType {
   addConsumable: (consumable: Omit<Consumable, "id" | "status">) => void;
   checkoutConsumable: (id: string) => void;
   addLicense: (license: Omit<License, "id">) => void;
-  addAsset: (asset: Omit<Asset, "id" | "health">) => void;
+  addAsset: (asset: Omit<Asset, "id" | "health"> & { id?: string }) => void;
   updateAsset: (id: string, updatedData: Partial<Asset>) => void;
   deleteAsset: (id: string) => void;
   addUser: (user: Omit<User, "id">) => void;
@@ -127,93 +134,70 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Initial mock data based precisely on UI specs and screenshots
-const initialUsers: User[] = [
-  {
-    id: "user-1",
-    name: "Sarah Jenkins",
-    email: "s.jenkins@assetcentral.co",
-    role: "Designer de Produto Sênior",
-    department: "Design & Inovação",
-    location: "Sede Nova York - 12º Andar",
-    avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCaEVl7ZYpdPvU_yqwhu2nz1E1pHIwIvTaJu6jX5ZfguzaM5bBinsTchavTA-kNXVzg1XJkH0sEJ5wU0n6_4JUqmTf8ZlzvGZxbaWHxrdhvyauoGl3hHNtxJK6geTv6ETDpuWVJ751pdtMhOtY_Z6voV3XE9dSmeqJSipYMWwpGmj59HEPRzRz5nJd3OlEpRW0TbFBbBnp9MsQbJV2p2ifNg2_NER09Q2RODT5m4UcxkuhWTrvJe9LzbKFlHGQqKiDB0Y68Y3d_x7k",
-  },
-  {
-    id: "user-2",
-    name: "Ricardo Mendes",
-    email: "r.mendes@assetcentral.co",
-    role: "Engenheiro de DevOps",
-    department: "Infraestrutura",
-    location: "Sede São Paulo - 4º Andar",
-    avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCOGQiMbBQnZlxDCbewZLnAsVeWA7buow4Jb9qIkIzT7HSfR66mvCWU3Oti_snkf90bSx5u8beUkXZaORAPrJWibl--03ftX9A3nMtTtAIGp1UB5nF03O_L7p6RoMCKDG7B7pJaCF-6aN6DbP2i4U3CTL9hOYAAGPZc-7YflzPdKakgVf4NbJ8-kyOabAnkSpVWt5thGQayZNCw4qK10gOd0qPmb38Q8Twei7q_ivYCIbnFHnqQSAIizxoauQfnwIjyIqVdlnKEIr0",
-  },
-  {
-    id: "user-3",
-    name: "Ana Lima",
-    email: "ana.lima@assetcentral.co",
-    role: "Gerente de Produto",
-    department: "Produto",
-    location: "Sede Principal",
-    avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuBIPbFrB9pdZW6k_JE52kQw8DtTZXW37vYounYCsA1_D1mXFeE6mHwwtvvkN21VtQ0E2sD36CUxBvbDu6baPfCsG8teOU7_htO4yjqxRQcQh6G1_iwE1iAB9B-_BX0KDTFHFPh-zZ8-aEI-twJHk6_7Vt2GiS_Glo6ShD72GEl6Weq-KHaNmcH7EBHdnkqoGRJOo9UbqcoNV3pitKJcWYli9hncg0E6TShtZPqXyJDJ3HTS5KfW7iQszDdZxb_Na6fFo23Z4rVTx5o",
-  },
-  {
-    id: "user-admin",
-    name: "Admin Global",
-    email: "admin@assetcentral.com",
-    username: "admin",
-    password: "admin",
-    role: "Gestor de Ativos TI",
-    department: "Tecnologia da Informação",
-    location: "Sede Principal (HQ)",
-    avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCUgS7fDbdjDDbHbn2iIu7i2JpVr8ZV57e7bMCZxI0oW4wvOe1EtGhDwQwGGtmzcXglqhyhWrbNp8MAEWZD4RGKx-DbHh-MUwv_Kh5iLshA6iGla5fFX50Ja_C_UXv7M8tVMmahFmBWAxaFGhE66FPaJSfCOH7R5QGcZDojaRxniHoQAESB2vnzVrW8FluC97ObSf7q3l53iq1ZGa2ZAjL-obKpeDYM1_Uy1lP6Xb2Ba1806vNp00naBpvXJtyhyeXo4Mo-IygrbiU",
-    isAdmin: true,
-  },
-];
-
-const initialAssets = (): Asset[] => [];
-
-const initialLicenses: License[] = [];
-
-const initialConsumables: Consumable[] = [];
-
-const initialActivities: Activity[] = [];
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem("ac_user");
-    return saved ? JSON.parse(saved) : initialUsers[3]; // Default to Admin
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return defaultUsers.find(u => u.id === "user-admin") || defaultUsers[0];
   });
 
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem("ac_users");
-    return saved ? JSON.parse(saved) : initialUsers;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return defaultUsers;
   });
 
   const [assets, setAssets] = useState<Asset[]>(() => {
     const saved = localStorage.getItem("ac_assets");
-    return saved ? JSON.parse(saved) : initialAssets();
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return defaultAssets;
   });
 
   const [licenses, setLicenses] = useState<License[]>(() => {
     const saved = localStorage.getItem("ac_licenses");
-    return saved ? JSON.parse(saved) : initialLicenses;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return defaultLicenses;
   });
 
   const [consumables, setConsumables] = useState<Consumable[]>(() => {
     const saved = localStorage.getItem("ac_consumables");
-    return saved ? JSON.parse(saved) : initialConsumables;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return defaultConsumables;
   });
 
   const [activities, setActivities] = useState<Activity[]>(() => {
     const saved = localStorage.getItem("ac_activities");
     if (saved) {
       try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
     }
-    return [];
+    return defaultActivities;
   });
 
   const [toast, setToast] = useState<Toast | null>(null);
@@ -299,6 +283,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       // Save directly to Firebase Firestore
       await saveDocumentToFirestore(collectionName, item);
+      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
     } catch (err) {
       console.warn(`[Firebase Firestore] Falha ao salvar em ${collectionName}:`, err);
     }
@@ -308,6 +293,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       // Delete directly from Firebase Firestore
       await deleteDocumentFromFirestore(collectionName, id);
+      setCloudInfo(prev => ({ ...prev, status: "connected", lastSync: new Date() }));
     } catch (err) {
       console.warn(`[Firebase Firestore] Falha ao excluir ${collectionName}/${id}:`, err);
     }
@@ -338,15 +324,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem("ac_activities", JSON.stringify(activities));
   }, [activities]);
 
+  // State references to avoid re-triggering callbacks and effects
+  const assetsRef = useRef(assets);
+  assetsRef.current = assets;
+  const licensesRef = useRef(licenses);
+  licensesRef.current = licenses;
+  const consumablesRef = useRef(consumables);
+  consumablesRef.current = consumables;
+  const activitiesRef = useRef(activities);
+  activitiesRef.current = activities;
+
   const forceCloudSync = useCallback(async () => {
     setCloudInfo(prev => ({ ...prev, status: "syncing" }));
     try {
-      const data = await loadDatabaseFromFirestore(initialUsers);
+      const data = await loadDatabaseFromFirestore(
+        defaultUsers,
+        assetsRef.current.length > 0 ? assetsRef.current : defaultAssets,
+        licensesRef.current.length > 0 ? licensesRef.current : defaultLicenses,
+        consumablesRef.current.length > 0 ? consumablesRef.current : defaultConsumables,
+        activitiesRef.current.length > 0 ? activitiesRef.current : defaultActivities
+      );
       if (data.users && data.users.length > 0) setUsers(data.users);
-      if (data.assets) setAssets(data.assets);
-      if (data.licenses) setLicenses(data.licenses);
-      if (data.consumables) setConsumables(data.consumables);
-      if (data.activities) setActivities(data.activities);
+      if (data.assets && data.assets.length > 0) setAssets(data.assets);
+      if (data.licenses && data.licenses.length > 0) setLicenses(data.licenses);
+      if (data.consumables && data.consumables.length > 0) setConsumables(data.consumables);
+      if (data.activities && data.activities.length > 0) setActivities(data.activities);
 
       setCloudInfo(prev => ({
         ...prev,
@@ -410,17 +412,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteAndClearSupabaseConfig();
 
     let isMounted = true;
+    let hasLoadedCloud = false;
 
     const initDbSync = async () => {
       try {
         setCloudInfo(prev => ({ ...prev, status: "syncing" }));
-        const fData = await loadDatabaseFromFirestore(initialUsers);
+        const fData = await loadDatabaseFromFirestore(
+          defaultUsers,
+          assetsRef.current.length > 0 ? assetsRef.current : defaultAssets,
+          licensesRef.current.length > 0 ? licensesRef.current : defaultLicenses,
+          consumablesRef.current.length > 0 ? consumablesRef.current : defaultConsumables,
+          activitiesRef.current.length > 0 ? activitiesRef.current : defaultActivities
+        );
         if (!isMounted) return;
+        hasLoadedCloud = true;
         if (fData.users && fData.users.length > 0) setUsers(fData.users);
-        if (fData.assets) setAssets(fData.assets);
-        if (fData.licenses) setLicenses(fData.licenses);
-        if (fData.consumables) setConsumables(fData.consumables);
-        if (fData.activities) setActivities(fData.activities);
+        if (fData.assets && fData.assets.length > 0) setAssets(fData.assets);
+        if (fData.licenses && fData.licenses.length > 0) setLicenses(fData.licenses);
+        if (fData.consumables && fData.consumables.length > 0) setConsumables(fData.consumables);
+        if (fData.activities && fData.activities.length > 0) setActivities(fData.activities);
 
         setCloudInfo(prev => ({
           ...prev,
@@ -446,19 +456,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     const unsubAssets = subscribeToCollection<Asset>("assets", (updated) => {
       if (!isMounted || !updated) return;
-      setAssets(updated);
+      if (updated.length > 0 || hasLoadedCloud) {
+        setAssets(updated);
+      }
     });
     const unsubLicenses = subscribeToCollection<License>("licenses", (updated) => {
       if (!isMounted || !updated) return;
-      setLicenses(updated);
+      if (updated.length > 0 || hasLoadedCloud) {
+        setLicenses(updated);
+      }
     });
     const unsubConsumables = subscribeToCollection<Consumable>("consumables", (updated) => {
       if (!isMounted || !updated) return;
-      setConsumables(updated);
+      if (updated.length > 0 || hasLoadedCloud) {
+        setConsumables(updated);
+      }
     });
     const unsubActivities = subscribeToCollection<Activity>("activities", (updated) => {
       if (!isMounted || !updated) return;
-      setActivities(updated);
+      if (updated.length > 0 || hasLoadedCloud) {
+        setActivities(updated);
+      }
     });
 
     // 2. Tab Focus & Background Polling to guarantee fresh sync on mobile or background devices
@@ -487,7 +505,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       document.removeEventListener("visibilitychange", onWindowFocus);
       clearInterval(syncInterval);
     };
-  }, [forceCloudSync, testConnection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auth Operations
   const login = (identifier: string, password?: string): boolean => {
@@ -849,9 +868,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Add Asset
-  const addAsset = (asset: Omit<Asset, "id" | "health">) => {
-    const id = "ASSET-" + Math.floor(Math.random() * 9000 + 1000);
+  const addAsset = (asset: Omit<Asset, "id" | "health"> & { id?: string }) => {
     const now = new Date();
+    const id = asset.id?.trim() || ("TAG-" + now.getFullYear() + "-" + Math.floor(Math.random() * 9000 + 1000));
     const nowIso = now.toISOString();
     const formattedDate = now.toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" });
     const formattedTime = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });

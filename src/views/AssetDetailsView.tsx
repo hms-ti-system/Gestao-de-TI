@@ -26,12 +26,19 @@ import {
   Check,
   Calendar,
   Image as ImageIcon,
-  Plus
+  Plus,
+  QrCode,
+  FileDown,
+  ShieldAlert
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Asset, User as UserType } from "../types";
 import { ImageViewerModal } from "../components/ImageViewerModal";
 import { EditAssetModal } from "../components/EditAssetModal";
+import { AssetTagModal } from "../components/AssetTagModal";
+import { PhysicalAssetPlaque } from "../components/PhysicalAssetPlaque";
+import { generateAssetPdf } from "../utils/pdfGenerator";
+import { getWarrantyAlert } from "./Assets";
 
 interface AssetDetailsViewProps {
   assetId: string;
@@ -56,6 +63,22 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
   const [showCheckinModal, setShowCheckinModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showTagModal, setShowTagModal] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const handleExportPdf = async () => {
+    if (!asset) return;
+    setIsExportingPdf(true);
+    try {
+      await generateAssetPdf(asset);
+      showToast("PDF Gerado!", `Relatório do ativo ${asset.name} baixado com sucesso.`, "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Erro ao Gerar PDF", "Não foi possível gerar o arquivo PDF do ativo.", "warning");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
 
   // Forms states
   const [checkoutUser, setCheckoutUser] = useState(users.filter(u => u.id !== "user-admin")[0]?.id || users[0]?.id || "");
@@ -258,7 +281,26 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
         </div>
 
         {/* Header Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <button 
+            onClick={() => setShowTagModal(true)}
+            className="px-3.5 py-2 bg-purple-50 border border-purple-200 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-1.5 shadow-xs"
+            title="Visualizar e Imprimir Etiqueta Patrimonial com QR Code"
+          >
+            <QrCode className="w-4 h-4 text-purple-600" />
+            <span>Etiqueta / QR Code</span>
+          </button>
+
+          <button 
+            onClick={handleExportPdf}
+            disabled={isExportingPdf}
+            className="px-3.5 py-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+            title="Salvar todas as informações do ativo em PDF"
+          >
+            <FileDown className="w-4 h-4 text-emerald-600" />
+            <span>{isExportingPdf ? "Gerando PDF..." : "Salvar em PDF"}</span>
+          </button>
+
           <button 
             onClick={() => setShowEditModal(true)}
             className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-2 shadow-xs"
@@ -287,6 +329,47 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Warranty Expiration Alert Banner if within 30, 15, 10, 5 days or expired */}
+      {(() => {
+        const alert = getWarrantyAlert(asset.warrantyDate);
+        if (!alert) return null;
+        return (
+          <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${
+            alert.type === "expired"
+              ? "bg-red-50 border-red-200 text-red-800"
+              : alert.type === "critical"
+              ? "bg-rose-50 border-rose-300 text-rose-800"
+              : alert.type === "urgent"
+              ? "bg-orange-50 border-orange-200 text-orange-800"
+              : alert.type === "warning"
+              ? "bg-amber-50 border-amber-200 text-amber-800"
+              : "bg-yellow-50 border-yellow-200 text-yellow-900"
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white rounded-lg shadow-xs">
+                <ShieldAlert className="w-5 h-5 text-current" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs uppercase tracking-wide">
+                  Alerta de Vencimento de Garantia: {alert.label}
+                </h4>
+                <p className="text-xs opacity-90 mt-0.5">
+                  {alert.type === "expired"
+                    ? `A garantia deste ativo expirou em ${formatDateDisplay(asset.warrantyDate)}. Verifique a renovação junto ao fornecedor.`
+                    : `A garantia deste ativo expira em ${formatDateDisplay(asset.warrantyDate)} (restam ${alert.days} dia${alert.days === 1 ? "" : "s"}). Considere acionar o suporte preventivo se necessário.`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="px-3 py-1.5 bg-white border border-current text-xs font-bold rounded-lg hover:bg-white/80 transition-colors shrink-0 shadow-xs cursor-pointer"
+            >
+              Renovar / Atualizar
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Main Grid: Details */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -382,7 +465,7 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
               <h3 className="font-sans text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-blue-600" />
-                Configuração de Hardware
+                Configuração de Hardware & Conectividade
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
@@ -406,8 +489,19 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Endereço MAC</p>
-                  <p className="text-xs font-mono font-medium text-slate-600 mt-1 truncate">{asset.macAddress || "—"}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Endereço MAC</p>
+                    {asset.macAddress && (
+                      <button 
+                        onClick={() => handleCopy(asset.macAddress || "", "Endereço MAC")}
+                        className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
+                        title="Copiar MAC Address"
+                      >
+                        {copiedField === "Endereço MAC" ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs font-mono font-bold text-slate-800 mt-1 truncate">{asset.macAddress || "—"}</p>
                 </div>
               </div>
             </div>
@@ -417,14 +511,23 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
             <h3 className="font-sans text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-blue-600" />
-              Informações de Cadastro e Financeiras
+              Informações de Aquisição, Garantia e Nota Fiscal
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Data de Cadastro</p>
-                <p className="text-xs font-semibold text-slate-800 mt-1">
-                  {formatDateDisplay(asset.registrationDate || asset.createdAt || asset.purchaseDate)}
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Nota Fiscal (NF)</p>
+                  {asset.invoiceNumber && (
+                    <button 
+                      onClick={() => handleCopy(asset.invoiceNumber || "", "Nota Fiscal")}
+                      className="text-slate-400 hover:text-blue-600 transition-colors p-0.5 cursor-pointer"
+                      title="Copiar Nota Fiscal"
+                    >
+                      {copiedField === "Nota Fiscal" ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs font-mono font-bold text-slate-800 mt-1">{asset.invoiceNumber || "—"}</p>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
@@ -432,6 +535,27 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
                 <p className="text-xs font-semibold text-slate-800 mt-1">
                   {formatDateDisplay(asset.purchaseDate || asset.registrationDate)}
                 </p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Validade da Garantia</p>
+                <div className="mt-1">
+                  <p className="text-xs font-semibold text-slate-800">
+                    {formatDateDisplay(asset.warrantyDate)}
+                  </p>
+                  {(() => {
+                    const alert = getWarrantyAlert(asset.warrantyDate);
+                    if (alert) {
+                      return (
+                        <span className={`inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold border ${alert.badgeClass}`}>
+                          <ShieldAlert className="w-2.5 h-2.5" />
+                          {alert.label}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
@@ -445,10 +569,11 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
               </div>
 
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Vencimento de Garantia</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Registro do Sistema</p>
                 <p className="text-xs font-semibold text-slate-800 mt-1">
-                  {formatDateDisplay(asset.warrantyDate)}
+                  {formatDateDisplay(asset.createdAt || asset.registrationDate)}
                 </p>
+                <span className="text-[9px] text-slate-400 font-medium">Automático</span>
               </div>
             </div>
           </div>
@@ -496,6 +621,48 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
         {/* Right column: active user, diagnostics, photo (4 cols) */}
         <div className="lg:col-span-4 space-y-6">
           
+          {/* Plaqueta Patrimonial com QR Code (Estilo Oficial ISIS) */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                  <QrCode className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-sans text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Plaqueta Patrimonial (TAG)
+                  </h3>
+                  <p className="text-[10px] text-slate-400">Identificação física com QR Code</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTagModal(true)}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                title="Imprimir ou baixar plaqueta com QR Code"
+              >
+                <Tag className="w-3.5 h-3.5" />
+                Imprimir
+              </button>
+            </div>
+
+            {/* Renderização Fiel da Plaqueta Física */}
+            <div className="pt-1 flex justify-center">
+              <PhysicalAssetPlaque
+                tagNumber={asset.id}
+                assetName={asset.name}
+                companyName="isis"
+                subTitle="Transportes e Terminais"
+                size="md"
+                showActions={true}
+              />
+            </div>
+
+            <p className="text-[10px] text-slate-400 text-center leading-relaxed">
+              Ao escanear este QR Code via câmera ou celular, as informações completas deste ativo são abertas automaticamente nesta tela.
+            </p>
+          </div>
+
           {/* Foto do Ativo */}
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-3">
@@ -909,6 +1076,15 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
           title={asset.name}
           subtitle={`${asset.manufacturer || ""} ${asset.model || ""} (${asset.id})`}
           onClose={() => setShowImageModal(false)}
+        />
+      )}
+
+      {/* Asset Tag & QR Code Modal */}
+      {showTagModal && (
+        <AssetTagModal
+          isOpen={showTagModal}
+          onClose={() => setShowTagModal(false)}
+          asset={asset}
         />
       )}
     </div>
