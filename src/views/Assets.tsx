@@ -17,7 +17,6 @@ import {
   MapPin,
   ClipboardList,
   ZoomIn,
-  FileSpreadsheet,
   QrCode,
   Tag,
   ShieldAlert,
@@ -490,14 +489,6 @@ export const Assets: React.FC<AssetsProps> = ({
             <span>Escanear QR Code</span>
           </button>
           <button 
-            onClick={() => setCurrentView("sheets")}
-            className="px-3.5 py-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-            title="Sincronizar ou Exportar para o Google Sheets"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Google Planilhas</span>
-          </button>
-          <button 
             onClick={handleExport}
             className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
           >
@@ -514,48 +505,159 @@ export const Assets: React.FC<AssetsProps> = ({
         </div>
       </div>
 
-      {/* Metrics Header Box */}
+      {/* Metrics Header Box - Filtros Interativos por Status */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 border border-slate-200 rounded-xl shadow-sm">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total de Ativos</p>
+        {/* Card 1: Total de Ativos (Mostra todos) */}
+        <button
+          type="button"
+          onClick={() => setSelectedStatus("all")}
+          className={`p-5 rounded-xl text-left transition-all cursor-pointer relative overflow-hidden group border ${
+            selectedStatus === "all"
+              ? "bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-900/20"
+              : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-md text-slate-900"
+          }`}
+          title="Clique para exibir todos os ativos"
+        >
+          <div className="flex items-center justify-between">
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${selectedStatus === "all" ? "text-slate-300" : "text-slate-400"}`}>
+              Total de Ativos
+            </p>
+            {selectedStatus === "all" ? (
+              <span className="px-2 py-0.5 bg-white/20 text-white text-[9px] font-black rounded-full uppercase tracking-wider">
+                Exibindo Todos
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity font-semibold">
+                Ver Todos
+              </span>
+            )}
+          </div>
           <div className="flex items-end justify-between mt-2">
-            <h3 className="font-mono text-2xl font-bold text-slate-900">{totalAssets}</h3>
-            <span className="text-xs text-green-600 flex items-center font-bold">
+            <h3 className={`font-mono text-2xl font-bold ${selectedStatus === "all" ? "text-white" : "text-slate-900"}`}>
+              {totalAssets}
+            </h3>
+            <span className={`text-xs flex items-center font-bold ${selectedStatus === "all" ? "text-green-400" : "text-green-600"}`}>
               <TrendingUp className="w-3 h-3 mr-0.5" /> {totalAssets > 0 ? `+${Math.round((inUseCount / totalAssets) * 100)}%` : "0%"}
             </span>
           </div>
-        </div>
+        </button>
 
-        <div className="bg-white p-5 border border-slate-200 rounded-xl shadow-sm">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Em Uso</p>
+        {/* Card 2: Em Uso (Status Atribuído) */}
+        <button
+          type="button"
+          onClick={() => setSelectedStatus(selectedStatus === "Atribuído" ? "all" : "Atribuído")}
+          className={`p-5 rounded-xl text-left transition-all cursor-pointer relative overflow-hidden group border ${
+            selectedStatus === "Atribuído"
+              ? "bg-blue-50/80 border-2 border-blue-600 shadow-md ring-2 ring-blue-600/15"
+              : "bg-white border-slate-200 hover:border-blue-300 hover:shadow-md text-slate-900"
+          }`}
+          title="Clique para filtrar somente ativos em uso"
+        >
+          <div className="flex items-center justify-between">
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${selectedStatus === "Atribuído" ? "text-blue-700 font-extrabold" : "text-slate-400"}`}>
+              Em Uso
+            </p>
+            {selectedStatus === "Atribuído" ? (
+              <span className="px-2 py-0.5 bg-blue-600 text-white text-[9px] font-black rounded-full uppercase tracking-wider">
+                Filtrando
+              </span>
+            ) : (
+              <span className="text-[10px] text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity font-semibold">
+                Filtrar
+              </span>
+            )}
+          </div>
           <div className="flex items-end justify-between mt-2">
             <h3 className="font-mono text-2xl font-bold text-slate-900">{inUseCount}</h3>
             <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
               <div className="h-full bg-blue-600" style={{ width: `${totalAssets > 0 ? (inUseCount / totalAssets) * 100 : 0}%` }}></div>
             </div>
           </div>
-        </div>
+        </button>
 
-        <div className="bg-white p-5 border border-slate-200 rounded-xl shadow-sm">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Em Manutenção</p>
+        {/* Card 3: Em Manutenção */}
+        <button
+          type="button"
+          onClick={() => setSelectedStatus(selectedStatus === "Manutenção" ? "all" : "Manutenção")}
+          className={`p-5 rounded-xl text-left transition-all cursor-pointer relative overflow-hidden group border ${
+            selectedStatus === "Manutenção"
+              ? "bg-amber-50/80 border-2 border-amber-600 shadow-md ring-2 ring-amber-600/15"
+              : "bg-white border-slate-200 hover:border-amber-300 hover:shadow-md text-slate-900"
+          }`}
+          title="Clique para filtrar somente ativos em manutenção"
+        >
+          <div className="flex items-center justify-between">
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${selectedStatus === "Manutenção" ? "text-amber-800 font-extrabold" : "text-slate-400"}`}>
+              Em Manutenção
+            </p>
+            {selectedStatus === "Manutenção" ? (
+              <span className="px-2 py-0.5 bg-amber-600 text-white text-[9px] font-black rounded-full uppercase tracking-wider">
+                Filtrando
+              </span>
+            ) : (
+              maintenanceCount > 0 && (
+                <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-full border border-amber-200">
+                  ALERTA
+                </span>
+              )
+            )}
+          </div>
           <div className="flex items-end justify-between mt-2">
             <h3 className="font-mono text-2xl font-bold text-slate-900">{maintenanceCount}</h3>
-            {maintenanceCount > 0 && (
-              <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-full border border-amber-200">
-                ALERTA
+            <AlertTriangle className={`w-5 h-5 ${selectedStatus === "Manutenção" ? "text-amber-600" : "text-amber-400"}`} />
+          </div>
+        </button>
+
+        {/* Card 4: Disponíveis */}
+        <button
+          type="button"
+          onClick={() => setSelectedStatus(selectedStatus === "Disponível" ? "all" : "Disponível")}
+          className={`p-5 rounded-xl text-left transition-all cursor-pointer relative overflow-hidden group border ${
+            selectedStatus === "Disponível"
+              ? "bg-emerald-50/80 border-2 border-emerald-600 shadow-md ring-2 ring-emerald-600/15"
+              : "bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md text-slate-900"
+          }`}
+          title="Clique para filtrar somente ativos disponíveis"
+        >
+          <div className="flex items-center justify-between">
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${selectedStatus === "Disponível" ? "text-emerald-800 font-extrabold" : "text-slate-400"}`}>
+              Disponíveis
+            </p>
+            {selectedStatus === "Disponível" ? (
+              <span className="px-2 py-0.5 bg-emerald-600 text-white text-[9px] font-black rounded-full uppercase tracking-wider">
+                Filtrando
+              </span>
+            ) : (
+              <span className="text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity font-semibold">
+                Filtrar
               </span>
             )}
           </div>
-        </div>
-
-        <div className="bg-white p-5 border border-slate-200 rounded-xl shadow-sm">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Disponíveis</p>
           <div className="flex items-end justify-between mt-2">
             <h3 className="font-mono text-2xl font-bold text-slate-900">{availableCount}</h3>
-            <CheckCircle2 className="w-5 h-5 text-green-500" />
+            <CheckCircle2 className={`w-5 h-5 ${selectedStatus === "Disponível" ? "text-emerald-600" : "text-green-500"}`} />
           </div>
-        </div>
+        </button>
       </div>
+
+      {/* Indicador de Filtro Ativo com Botão Rápido para Limpar */}
+      {selectedStatus !== "all" && (
+        <div className="flex items-center justify-between px-4 py-2 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-900">
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>
+              Exibindo apenas: <strong className="font-bold">{selectedStatus === "Atribuído" ? "Ativos em Uso" : selectedStatus === "Manutenção" ? "Ativos em Manutenção" : "Ativos Disponíveis"}</strong> ({filteredAssets.length} {filteredAssets.length === 1 ? "ativo encontrado" : "ativos encontrados"})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedStatus("all")}
+            className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-white hover:bg-blue-100/70 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors cursor-pointer shadow-2xs"
+          >
+            Limpar Filtro (Ver Todos)
+          </button>
+        </div>
+      )}
 
       {/* Main Table Segment */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">

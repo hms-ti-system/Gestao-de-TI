@@ -1,0 +1,64 @@
+<svg viewBox="0 0 350 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="isisGlobeGrad" cx="38%" cy="36%" r="68%" fx="30%" fy="30%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="45%" stop-color="#1d4ed8" />
+      <stop offset="85%" stop-color="#1e3a8a" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </radialGradient>
+    <radialGradient id="isisGlobeShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="70%" stop-color="transparent" />
+      <stop offset="100%" stop-color="rgba(0,0,0,0.4)" />
+    </radialGradient>
+    <linearGradient id="isisRoadGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#cbd5e1" />
+      <stop offset="25%" stop-color="#f8fafc" />
+      <stop offset="70%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e2e8f0" />
+    </linearGradient>
+    <radialGradient id="isisDotGrad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#f1f5f9" />
+      <stop offset="50%" stop-color="#94a3b8" />
+      <stop offset="100%" stop-color="#475569" />
+    </radialGradient>
+    <clipPath id="isisGlobeClip">
+      <circle cx="48" cy="52" r="40" />
+    </clipPath>
+  </defs>
+
+  <!-- GLOBO TERRESTRE COM PISTA EM 'S' -->
+  <g id="globe-group">
+    <circle cx="48" cy="52" r="40" fill="url(#isisGlobeGrad)" />
+    <g clip-path="url(#isisGlobeClip)">
+      <path d="M32 45 C30 52, 28 62, 34 72 C37 77, 43 82, 45 88 C40 85, 34 78, 29 70 C24 62, 25 50, 29 44 Z" fill="#0f2b5c" opacity="0.9" />
+      <path d="M18 24 C22 18, 30 16, 38 22 C34 26, 30 32, 24 35 C18 36, 15 30, 18 24 Z" fill="#0f2b5c" opacity="0.85" />
+      <path d="M62 26 C68 22, 78 25, 84 32 C80 40, 76 52, 82 62 C80 68, 72 65, 68 56 C65 48, 60 38, 62 26 Z" fill="#0f2b5c" opacity="0.9" />
+      <circle cx="48" cy="52" r="40" fill="url(#isisGlobeShadow)" />
+      <path d="M26 88 C20 72, 34 60, 48 48 C60 36, 68 24, 60 14 C56 12, 53 14, 52 16 C58 26, 48 38, 36 50 C24 62, 14 74, 26 88 Z" fill="url(#isisRoadGrad)" stroke="#cbd5e1" stroke-width="0.5" />
+    </g>
+    <circle cx="48" cy="52" r="40" stroke="rgba(255,255,255,0.25)" stroke-width="1" fill="none" />
+    <circle cx="60" cy="11" r="6.5" fill="url(#isisDotGrad)" />
+  </g>
+
+  <!-- TIPOGRAFIA 'isis' -->
+  <g id="isis-letters" transform="translate(100, 0)">
+    <!-- Primeiro 'i' -->
+    <ellipse cx="26" cy="14" rx="12" ry="6" transform="rotate(-18 26 14)" fill="#09090b" />
+    <path d="M8 70 L28 26 L48 26 L28 70 Z" fill="#09090b" />
+
+    <!-- Primeiro 's' -->
+    <path d="M98 28 C90 25, 78 25, 70 28 C59 32, 54 39, 56 46 C58 54, 68 56, 82 59 C95 62, 102 65, 104 73 C106 82, 95 89, 78 89 C64 89, 52 85, 46 80 L52 68 C58 73, 68 77, 78 77 C84 77, 89 74, 88 70 C87 66, 80 63, 68 60 C53 56, 44 52, 42 43 C40 33, 50 24, 68 24 C80 24, 91 27, 96 30 Z" fill="#09090b" />
+
+    <!-- Segundo 'i' -->
+    <ellipse cx="136" cy="14" rx="12" ry="6" transform="rotate(-18 136 14)" fill="#09090b" />
+    <path d="M118 70 L138 26 L158 26 L138 70 Z" fill="#09090b" />
+
+    <!-- Segundo 's' em azul (#0088cc) -->
+    <path d="M208 28 C200 25, 188 25, 180 28 C169 32, 164 39, 166 46 C168 54, 178 56, 192 59 C205 62, 212 65, 214 73 C216 82, 205 89, 188 89 C174 89, 162 85, 156 80 L162 68 C168 73, 178 77, 188 77 C194 77, 199 74, 198 70 C197 66, 190 63, 178 60 C163 56, 154 52, 152 43 C150 33, 160 24, 178 24 C190 24, 201 27, 206 30 Z" fill="#0088cc" />
+  </g>
+
+  <!-- Subtítulo 'Transportes e Terminais' -->
+  <text x="106" y="94" fill="#64748b" font-size="14.5" font-style="italic" font-weight="600" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif" letter-spacing="0.2">
+    Transportes e Terminais
+  </text>
+</svg>

@@ -16,22 +16,35 @@ export interface ParsedTagResult {
  * Ex: "https://.../asset/000937" -> "000937"
  * Ex: '{"id":"000937"}' -> "000937"
  */
+/**
+ * Extrai o código limpo da TAG a partir do texto decodificado do QR Code.
+ * REQUISITO: Deve ser cadastrado SOMENTE OS NÚMEROS, excluindo a palavra "Patrimônio"
+ * e a frase "Pertence à ISIS TRANSPORTES E TERMINAIS".
+ *
+ * Exemplos tratados:
+ * - "Patrimônio: 000937\nPertence à ISIS TRANSPORTES E TERMINAIS" -> "000937"
+ * - "Pertence à ISIS TRANSPORTES E TERMINAIS - Patrimônio 000937" -> "000937"
+ * - "Patrimônio 000937" -> "000937"
+ * - "000937" -> "000937"
+ * - "TAG: 000937" -> "000937"
+ * - "https://.../asset/000937" -> "000937"
+ */
 export function extractTagFromQrCode(decodedText: string): ParsedTagResult {
   const raw = decodedText ? decodedText.trim() : "";
   if (!raw) {
     return { tag: "", raw: "", isNumeric: false };
   }
 
-  let tag = raw;
+  let text = raw;
 
-  // 1. Tentar ler se for JSON
-  if ((tag.startsWith("{") && tag.endsWith("}")) || (tag.startsWith("[") && tag.endsWith("]"))) {
+  // 1. Tentar ler se for JSON (ex: {"id": "000937"})
+  if ((text.startsWith("{") && text.endsWith("}")) || (text.startsWith("[") && text.endsWith("]"))) {
     try {
-      const parsed = JSON.parse(tag);
+      const parsed = JSON.parse(text);
       if (parsed && typeof parsed === "object") {
         const candidate = parsed.tag || parsed.id || parsed.code || parsed.numero || parsed.assetId || parsed.patrimonio;
         if (candidate) {
-          tag = String(candidate).trim();
+          text = String(candidate).trim();
         }
       }
     } catch {
@@ -40,9 +53,9 @@ export function extractTagFromQrCode(decodedText: string): ParsedTagResult {
   }
 
   // 2. Se for uma URL (ex: https://empresa.com.br/ativo/000937 ou ?tag=000937)
-  if (tag.startsWith("http://") || tag.startsWith("https://")) {
+  if (text.startsWith("http://") || text.startsWith("https://")) {
     try {
-      const url = new URL(tag);
+      const url = new URL(text);
       const queryTag = 
         url.searchParams.get("tag") || 
         url.searchParams.get("id") || 
@@ -51,11 +64,11 @@ export function extractTagFromQrCode(decodedText: string): ParsedTagResult {
         url.searchParams.get("patrimonio");
       
       if (queryTag) {
-        tag = queryTag.trim();
+        text = queryTag.trim();
       } else {
         const segments = url.pathname.split("/").filter(Boolean);
         if (segments.length > 0) {
-          tag = segments[segments.length - 1].trim();
+          text = segments[segments.length - 1].trim();
         }
       }
     } catch {
@@ -63,17 +76,41 @@ export function extractTagFromQrCode(decodedText: string): ParsedTagResult {
     }
   }
 
-  // 3. Se contiver prefixo como "TAG: 000937" ou "PATRIMONIO: 000937" ou "ISIS: 000937"
-  if (tag.includes(":")) {
-    const parts = tag.split(":");
-    const lastPart = parts[parts.length - 1].trim();
-    if (lastPart) {
-      tag = lastPart;
-    }
-  }
+  // 3. Excluir explicitamente a frase institucional e a palavra "Patrimônio":
+  // - "Pertence à ISIS TRANSPORTES E TERMINAIS" (com variações de acento à/a/ao/da, maiúsculas/minúsculas e pontuações)
+  // - "ISIS TRANSPORTES E TERMINAIS"
+  // - "Patrimônio" / "Patrimonio" / "PATRIMÔNIO" / "PATRIMONIO"
+  let cleaned = text;
 
-  // 4. Limpar aspas ou colchetes residuais
-  tag = tag.replace(/^["']|["']$/g, "").trim();
+  // Remover a frase institucional
+  cleaned = cleaned.replace(/pertence\s+[aàá]?\s*isis\s+transportes\s+e\s+terminais/gi, " ");
+  cleaned = cleaned.replace(/isis\s+transportes\s+e\s+terminais/gi, " ");
+
+  // Remover a palavra "Patrimônio" e variações
+  cleaned = cleaned.replace(/patrim[oôó]nio[:.]?/gi, " ");
+
+  // Remover prefixos comuns de identificação
+  cleaned = cleaned.replace(/\b(tag|n[ºo]|c[oó]d(?:igo)?|id)\s*[:.]?/gi, " ");
+
+  // 4. Cadastrar SOMENTE OS NÚMEROS:
+  // Procura sequências numéricas (mantendo zeros à esquerda, ex: "000937")
+  const digitMatches = cleaned.match(/\d+/g);
+  let tag = "";
+
+  if (digitMatches && digitMatches.length > 0) {
+    if (digitMatches.length === 1) {
+      // Caso mais comum da plaqueta: uma única sequência numérica (ex: "000937")
+      tag = digitMatches[0];
+    } else {
+      // Se houver múltiplos blocos de dígitos, seleciona preferencialmente o de 6 dígitos
+      // (padrão oficial de plaquetas patrimoniais como ISIS 000937) ou o bloco mais longo
+      const sixDigit = digitMatches.find((d) => d.length === 6);
+      tag = sixDigit || digitMatches.reduce((max, cur) => (cur.length > max.length ? cur : max), digitMatches[0]);
+    }
+  } else {
+    // Fallback se o código não contiver dígitos (apenas letras/hífens)
+    tag = cleaned.replace(/^["':\s]+|["':\s]+$/g, "").trim();
+  }
 
   const isNumeric = /^\d+$/.test(tag);
   const numericValue = isNumeric ? parseInt(tag, 10) : undefined;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import QRCode from "qrcode";
 import { QrCode, Copy, Check, Printer, Download } from "lucide-react";
+import { IsisLogo } from "./IsisLogo";
 
 interface PhysicalAssetPlaqueProps {
   tagNumber: string;
@@ -75,26 +76,13 @@ export const PhysicalAssetPlaque: React.FC<PhysicalAssetPlaqueProps> = ({
 
         {/* Lado Esquerdo: Logo Isis + Número da TAG em destaque */}
         <div className="flex-1 min-w-0 flex flex-col justify-between pl-1">
-          {/* Logo Empresa Isis Transportes e Terminais */}
-          <div className="flex items-center gap-1.5">
-            {/* Ícone estilizado do globo Isis */}
-            <div className="relative w-6 h-6 shrink-0 rounded-full bg-linear-to-tr from-sky-600 via-blue-500 to-cyan-400 p-0.5 shadow-2xs flex items-center justify-center">
-              <div className="w-full h-full rounded-full border border-white/60 flex items-center justify-center overflow-hidden">
-                <div className="w-3.5 h-3.5 border-r border-t border-white/90 rounded-full transform -rotate-45" />
-              </div>
-            </div>
-
-            <div className="flex flex-col">
-              <div className="flex items-baseline">
-                <span className="text-sm font-black tracking-tight text-slate-800 lowercase">
-                  {companyName}
-                </span>
-                <span className="w-1 h-1 rounded-full bg-cyan-500 ml-0.5" />
-              </div>
-              <span className="text-[7.5px] font-medium tracking-tighter text-slate-400 -mt-1 truncate">
-                {subTitle}
-              </span>
-            </div>
+          {/* Logo Empresa Isis Transportes e Terminais conforme imagem oficial */}
+          <div className="pb-1">
+            <IsisLogo
+              size={size === "sm" ? "xs" : size === "lg" ? "md" : "sm"}
+              showTagline={true}
+              className="max-w-[190px]"
+            />
           </div>
 
           {/* Numeração da TAG com tipografia idêntica à plaqueta física */}
