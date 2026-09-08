@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Asset, User } from "../types";
+import { canOperate, canRegisterAssets, canDeleteAssets } from "../utils/permissions";
 import { ImageViewerModal } from "../components/ImageViewerModal";
 import { EditAssetModal } from "../components/EditAssetModal";
 import { QrScannerModal } from "../components/QrScannerModal";
@@ -79,6 +80,9 @@ export const Assets: React.FC<AssetsProps> = ({
   } = useApp();
 
   const isAdmin = currentUser?.isAdmin || currentUser?.id === "user-admin" || currentUser?.role?.toLowerCase().includes("admin");
+  const canRegister = canRegisterAssets(currentUser);
+  const canDelete = canDeleteAssets(currentUser);
+  const canOperateSystem = canOperate(currentUser);
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -189,8 +193,8 @@ export const Assets: React.FC<AssetsProps> = ({
   };
 
   const handleOpenAddModal = () => {
-    if (!isAdmin) {
-      showToast("Acesso Restrito", "Apenas administradores podem cadastrar novos ativos no sistema.", "warning");
+    if (!canRegister) {
+      showToast("Acesso Restrito", "Apenas administradores e operadores podem cadastrar novos ativos no sistema.", "warning");
       return;
     }
     resetAddForm();
@@ -252,6 +256,8 @@ export const Assets: React.FC<AssetsProps> = ({
   });
 
   const uniqueLocations = Array.from(new Set([
+    "Pátio 1",
+    "Pátio 2",
     "Sede Principal (HQ)",
     "Remoto - Home Office",
     "Escritório Regional SP",
@@ -880,18 +886,18 @@ export const Assets: React.FC<AssetsProps> = ({
                         </button>
                         <button 
                           onClick={() => {
-                            if (!isAdmin) {
-                              showToast("Acesso Restrito", "Apenas administradores podem editar ativos.", "warning");
+                            if (!canRegister) {
+                              showToast("Acesso Restrito", "Apenas administradores e operadores podem editar ativos.", "warning");
                               return;
                             }
                             setEditingAsset(asset);
                           }}
                           className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors cursor-pointer"
-                          title={isAdmin ? "Editar Ativo (Administrador)" : "Apenas administradores podem editar"}
+                          title={canRegister ? "Editar Ativo" : "Apenas administradores e operadores podem editar"}
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
-                        {isAdmin && (
+                        {canDelete && (
                           <button 
                             onClick={() => setAssetToDelete(asset)}
                             className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"

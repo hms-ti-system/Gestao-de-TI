@@ -1,3 +1,5 @@
+export type UserPrivilege = "admin" | "operator" | "user";
+
 export interface User {
   id: string;
   name: string;
@@ -9,6 +11,7 @@ export interface User {
   location: string;
   avatar: string;
   isAdmin?: boolean;
+  privilege?: UserPrivilege;
 }
 
 export type AssetStatus = "Disponível" | "Atribuído" | "Manutenção";

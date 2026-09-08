@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Consumable } from "../types";
+import { canManageConsumables, canDeleteAssets, canOperate } from "../utils/permissions";
 
 export const Consumables: React.FC = () => {
   const { 
@@ -33,7 +34,8 @@ export const Consumables: React.FC = () => {
     showToast 
   } = useApp();
 
-  const isAdmin = currentUser?.isAdmin || currentUser?.id === "user-admin" || currentUser?.role?.toLowerCase().includes("admin");
+  const canManage = canManageConsumables(currentUser);
+  const canDelete = canDeleteAssets(currentUser);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingConsumable, setEditingConsumable] = useState<Consumable | null>(null);
@@ -72,8 +74,8 @@ export const Consumables: React.FC = () => {
   };
 
   const handleOpenAddModal = () => {
-    if (!isAdmin) {
-      showToast("Acesso Restrito", "Apenas administradores podem cadastrar novos consumíveis no sistema.", "warning");
+    if (!canManage) {
+      showToast("Acesso Restrito", "Apenas administradores e operadores podem cadastrar novos consumíveis no sistema.", "warning");
       return;
     }
     setName("");
@@ -107,8 +109,8 @@ export const Consumables: React.FC = () => {
   };
 
   const handleStartEdit = (item: Consumable) => {
-    if (!isAdmin) {
-      showToast("Acesso Restrito", "Apenas administradores podem editar consumíveis.", "warning");
+    if (!canManage) {
+      showToast("Acesso Restrito", "Apenas administradores e operadores podem editar consumíveis.", "warning");
       return;
     }
     setEditingConsumable(item);
@@ -234,30 +236,34 @@ export const Consumables: React.FC = () => {
                       {item.status}
                     </span>
 
-                    {isAdmin && (
+                    {(canManage || canDelete) && (
                       <div className="flex items-center gap-0.5 ml-1">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEdit(item);
-                          }}
-                          className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                          title="Editar Consumível (Administrador)"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeletingConsumable(item);
-                          }}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          title="Excluir Consumível (Administrador)"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {canManage && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEdit(item);
+                            }}
+                            className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                            title="Editar Consumível"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingConsumable(item);
+                            }}
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Excluir Consumível (Administrador)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

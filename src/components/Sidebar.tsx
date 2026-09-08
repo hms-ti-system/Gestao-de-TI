@@ -1,5 +1,6 @@
 import React from "react";
 import { useApp } from "../context/AppContext";
+import { canManageUsers } from "../utils/permissions";
 import { 
   LayoutDashboard, 
   Laptop, 
@@ -31,7 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { currentUser, logout } = useApp();
 
-  const isAdminUser = currentUser?.isAdmin || currentUser?.id === "user-admin";
+  const isAdminUser = canManageUsers(currentUser);
 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },

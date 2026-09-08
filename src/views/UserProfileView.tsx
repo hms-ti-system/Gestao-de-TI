@@ -19,6 +19,7 @@ import {
 import { motion } from "motion/react";
 import { Asset } from "../types";
 import { AvatarUploader } from "../components/AvatarUploader";
+import { getUserPrivilege } from "../utils/permissions";
 
 const presetAvatars = [
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCaEVl7ZYpdPvU_yqwhu2nz1E1pHIwIvTaJu6jX5ZfguzaM5bBinsTchavTA-kNXVzg1XJkH0sEJ5wU0n6_4JUqmTf8ZlzvGZxbaWHxrdhvyauoGl3hHNtxJK6geTv6ETDpuWVJ751pdtMhOtY_Z6voV3XE9dSmeqJSipYMWwpGmj59HEPRzRz5nJd3OlEpRW0TbFBbBnp9MsQbJV2p2ifNg2_NER09Q2RODT5m4UcxkuhWTrvJe9LzbKFlHGQqKiDB0Y68Y3d_x7k",
@@ -153,7 +154,31 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ setCurrentView
         </div>
 
         <div className="flex-1 text-center md:text-left space-y-2">
-          <h3 className="font-sans text-xl font-bold text-slate-900 leading-none">{currentUser.name}</h3>
+          <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
+            <h3 className="font-sans text-xl font-bold text-slate-900 leading-none">{currentUser.name}</h3>
+            {(() => {
+              const priv = getUserPrivilege(currentUser);
+              if (priv === "admin") {
+                return (
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold rounded-full uppercase tracking-wider flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" /> Administrador
+                  </span>
+                );
+              }
+              if (priv === "operator") {
+                return (
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-full uppercase tracking-wider flex items-center gap-1">
+                    Operador
+                  </span>
+                );
+              }
+              return (
+                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                  Colaborador
+                </span>
+              );
+            })()}
+          </div>
           <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">{currentUser.role}</p>
           
           <div className="flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-2 text-xs text-slate-500 font-medium pt-1">
@@ -308,15 +333,45 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ setCurrentView
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-500 uppercase tracking-wide">Filial / Localização</label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-600 text-xs uppercase tracking-wide">Filial / Localização</label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setLocation("Pátio 1")}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
+                          location === "Pátio 1"
+                            ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                            : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                        }`}
+                      >
+                        Pátio 1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLocation("Pátio 2")}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
+                          location === "Pátio 2"
+                            ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                            : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                        }`}
+                      >
+                        Pátio 2
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     required
+                    placeholder="Pátio 1, Pátio 2 ou digite outra filial..."
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
                   />
+                  <span className="text-[10px] text-slate-400 block">
+                    Disponível <strong>Pátio 1</strong>, <strong>Pátio 2</strong> ou você pode digitar livremente.
+                  </span>
                 </div>
 
                 <div className="space-y-1">

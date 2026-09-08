@@ -16,10 +16,12 @@ import {
   ShieldCheck,
   Plus,
   Camera,
+  Sliders,
   X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { User } from "../types";
+import { User, UserPrivilege } from "../types";
+import { getUserPrivilege, getPrivilegeLabel } from "../utils/permissions";
 import { AvatarUploader } from "../components/AvatarUploader";
 
 export const Users: React.FC = () => {
@@ -39,7 +41,7 @@ export const Users: React.FC = () => {
   const [department, setDepartment] = useState("");
   const [location, setLocation] = useState("");
   const [avatar, setAvatar] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [privilege, setPrivilege] = useState<UserPrivilege>("user");
 
   const presetAvatars = [
     "https://lh3.googleusercontent.com/aida-public/AB6AXuCaEVl7ZYpdPvU_yqwhu2nz1E1pHIwIvTaJu6jX5ZfguzaM5bBinsTchavTA-kNXVzg1XJkH0sEJ5wU0n6_4JUqmTf8ZlzvGZxbaWHxrdhvyauoGl3hHNtxJK6geTv6ETDpuWVJ751pdtMhOtY_Z6voV3XE9dSmeqJSipYMWwpGmj59HEPRzRz5nJd3OlEpRW0TbFBbBnp9MsQbJV2p2ifNg2_NER09Q2RODT5m4UcxkuhWTrvJe9LzbKFlHGQqKiDB0Y68Y3d_x7k",
@@ -52,11 +54,13 @@ export const Users: React.FC = () => {
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase()) ||
     u.role.toLowerCase().includes(search.toLowerCase()) ||
-    u.department.toLowerCase().includes(search.toLowerCase())
+    u.department.toLowerCase().includes(search.toLowerCase()) ||
+    (u.location && u.location.toLowerCase().includes(search.toLowerCase()))
   );
 
   const uniqueDepartments = Array.from(new Set([
     "Tecnologia da Informação",
+    "Operações & Logística",
     "Design & Inovação",
     "Produto",
     "Infraestrutura",
@@ -65,11 +69,17 @@ export const Users: React.FC = () => {
     ...users.map(u => u.department)
   ].filter(Boolean)));
 
-  const uniqueLocations = Array.from(new Set([
+  const PRESET_LOCATIONS = [
+    "Pátio 1",
+    "Pátio 2",
     "Sede Principal (HQ)",
     "Sede São Paulo - 4º Andar",
     "Sede Nova York - 12º Andar",
     "Remoto (Home Office)",
+  ];
+
+  const uniqueLocations = Array.from(new Set([
+    ...PRESET_LOCATIONS,
     ...users.map(u => u.location)
   ].filter(Boolean)));
 
@@ -81,10 +91,10 @@ export const Users: React.FC = () => {
     setName("");
     setEmail("");
     setRole("");
-    setDepartment("Tecnologia da Informação");
-    setLocation("Sede Principal (HQ)");
+    setDepartment("Operações & Logística");
+    setLocation("Pátio 1");
     setAvatar(presetAvatars[0]);
-    setIsAdmin(false);
+    setPrivilege("user");
     setShowAddModal(true);
   };
 
@@ -100,9 +110,10 @@ export const Users: React.FC = () => {
       email: email.trim(),
       role: role.trim(),
       department,
-      location,
+      location: location.trim() || "Pátio 1",
       avatar: avatar || presetAvatars[0],
-      isAdmin,
+      isAdmin: privilege === "admin",
+      privilege,
     });
 
     setShowAddModal(false);
@@ -114,9 +125,9 @@ export const Users: React.FC = () => {
     setEmail(user.email);
     setRole(user.role);
     setDepartment(user.department);
-    setLocation(user.location);
+    setLocation(user.location || "Pátio 1");
     setAvatar(user.avatar);
-    setIsAdmin(!!user.isAdmin);
+    setPrivilege(getUserPrivilege(user));
     setShowEditModal(true);
   };
 
@@ -132,7 +143,7 @@ export const Users: React.FC = () => {
     }
 
     // Safety: don't let current admin demote themselves by accident
-    if (userIdToEdit === currentUser?.id && !isAdmin) {
+    if (userIdToEdit === currentUser?.id && privilege !== "admin") {
       showToast("Acesso Negado", "Você não pode remover seus próprios privilégios de Administrador Global.", "warning");
       return;
     }
@@ -142,9 +153,10 @@ export const Users: React.FC = () => {
       email: email.trim(),
       role: role.trim(),
       department,
-      location,
+      location: location.trim() || "Pátio 1",
       avatar,
-      isAdmin,
+      isAdmin: privilege === "admin",
+      privilege,
     });
 
     setShowEditModal(false);
@@ -166,16 +178,26 @@ export const Users: React.FC = () => {
     setUserToDelete(null);
   };
 
-  const handleToggleAdminDirect = (user: User) => {
-    if (user.id === currentUser?.id) {
-      showToast("Ação Bloqueada", "Você não pode revogar seus próprios privilégios de administrador de forma direta.", "warning");
+  const handleCyclePrivilege = (user: User) => {
+    if (user.id === currentUser?.id && getUserPrivilege(user) === "admin") {
+      showToast("Ação Bloqueada", "Você não pode revogar seus próprios privilégios de administrador.", "warning");
       return;
     }
-    const newAdminStatus = !user.isAdmin;
-    updateUser(user.id, { isAdmin: newAdminStatus });
+    const currentPriv = getUserPrivilege(user);
+    let nextPriv: UserPrivilege = "user";
+    if (currentPriv === "user") nextPriv = "operator";
+    else if (currentPriv === "operator") nextPriv = "admin";
+    else nextPriv = "user";
+
+    updateUser(user.id, {
+      isAdmin: nextPriv === "admin",
+      privilege: nextPriv,
+    });
+
+    const label = getPrivilegeLabel(nextPriv);
     showToast(
-      "Permissões Atualizadas",
-      `Permissão de administrador para ${user.name} foi ${newAdminStatus ? "concedida" : "revogada"}.`,
+      "Permissão Atualizada",
+      `${user.name} agora possui o nível de acesso: ${label}.`,
       "info"
     );
   };
@@ -203,7 +225,7 @@ export const Users: React.FC = () => {
             u.role,
             u.department,
             u.location,
-            u.isAdmin || u.id === "user-admin" ? "Administrador Global" : "Colaborador",
+            getPrivilegeLabel(getUserPrivilege(u)),
             getAssignedAssetsCount(u.id)
           ];
 
@@ -233,13 +255,17 @@ export const Users: React.FC = () => {
     }
   };
 
+  const adminCount = users.filter(u => getUserPrivilege(u) === "admin").length;
+  const operatorCount = users.filter(u => getUserPrivilege(u) === "operator").length;
+  const standardCount = users.filter(u => getUserPrivilege(u) === "user").length;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* View Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="font-sans text-2xl font-extrabold text-slate-900 tracking-tight leading-none">Usuários & Permissões</h2>
-          <p className="text-sm text-slate-400 font-medium mt-1">Gerencie a equipe corporativa, atribua chaves de acesso e audite notebooks alocados.</p>
+          <p className="text-sm text-slate-400 font-medium mt-1">Gerencie a equipe corporativa, atribua níveis de acesso (Administrador, Operador, Colaborador) e audite equipamentos alocados.</p>
         </div>
         <div className="flex gap-3">
           <button 
@@ -259,7 +285,7 @@ export const Users: React.FC = () => {
         </div>
       </div>
 
-      {/* Metrics segment */}
+      {/* Metrics segment - 3-tier Privilege View */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 border border-slate-200 rounded-xl shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total de Usuários</p>
@@ -273,29 +299,31 @@ export const Users: React.FC = () => {
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Administradores</p>
           <div className="flex items-end justify-between mt-2">
             <h3 className="font-mono text-2xl font-bold text-indigo-600">
-              {users.filter(u => u.isAdmin || u.id === "user-admin").length}
+              {adminCount}
             </h3>
-            <Shield className="w-5 h-5 text-indigo-400" />
+            <ShieldCheck className="w-5 h-5 text-indigo-500" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 border border-slate-200 rounded-xl shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Operadores</p>
+          <div className="flex items-end justify-between mt-2">
+            <h3 className="font-mono text-2xl font-bold text-blue-600">
+              {operatorCount}
+            </h3>
+            <Sliders className="w-5 h-5 text-blue-500" />
           </div>
         </div>
 
         <div className="bg-white p-5 border border-slate-200 rounded-xl shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Colaboradores Comuns</p>
           <div className="flex items-end justify-between mt-2">
-            <h3 className="font-mono text-2xl font-bold text-slate-900">
-              {users.filter(u => !u.isAdmin && u.id !== "user-admin").length}
+            <h3 className="font-mono text-2xl font-bold text-slate-700">
+              {standardCount}
             </h3>
             <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full">
               Padrão
             </span>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 border border-slate-200 rounded-xl shadow-sm">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ativos Atribuídos</p>
-          <div className="flex items-end justify-between mt-2">
-            <h3 className="font-mono text-2xl font-bold text-slate-900">{assets.filter(a => a.assignedToUserId).length}</h3>
-            <Check className="w-5 h-5 text-emerald-500" />
           </div>
         </div>
       </div>
@@ -309,7 +337,7 @@ export const Users: React.FC = () => {
             </span>
             <input
               type="text"
-              placeholder="Buscar por nome, e-mail, cargo..."
+              placeholder="Buscar por nome, e-mail, cargo, filial..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full bg-white border border-slate-200 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-800 transition-all outline-none"
@@ -325,14 +353,14 @@ export const Users: React.FC = () => {
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Colaborador</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Departamento & Filial</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ativos sob Guarda</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Permissão</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Privilégio de Acesso</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.map((user) => {
                 const assignedAssetsCount = getAssignedAssetsCount(user.id);
-                const isUserAdmin = user.isAdmin || user.id === "user-admin";
+                const userPrivilege = getUserPrivilege(user);
 
                 return (
                   <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
@@ -362,9 +390,9 @@ export const Users: React.FC = () => {
                           <Building className="w-3.5 h-3.5 text-slate-400" />
                           {user.department}
                         </span>
-                        <span className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                          {user.location}
+                        <span className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 font-medium">
+                          <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                          {user.location || "Pátio 1"}
                         </span>
                       </div>
                     </td>
@@ -385,22 +413,31 @@ export const Users: React.FC = () => {
                     {/* Permission Status & Toggle access direct click */}
                     <td className="px-6 py-4">
                       <button
-                        onClick={() => handleToggleAdminDirect(user)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase border transition-colors cursor-pointer ${
-                          isUserAdmin
+                        onClick={() => handleCyclePrivilege(user)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border transition-all cursor-pointer shadow-xs ${
+                          userPrivilege === "admin"
                             ? "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200"
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200"
+                            : userPrivilege === "operator"
+                            ? "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
                         }`}
-                        title="Clique rápido para alternar cargo administrativo"
+                        title="Clique para alternar: Colaborador → Operador → Administrador"
                       >
-                        {isUserAdmin ? (
+                        {userPrivilege === "admin" && (
                           <>
                             <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
                             <span>Administrador</span>
                           </>
-                        ) : (
+                        )}
+                        {userPrivilege === "operator" && (
                           <>
-                            <Shield className="w-3.5 h-3.5 text-slate-400" />
+                            <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Operador</span>
+                          </>
+                        )}
+                        {userPrivilege === "user" && (
+                          <>
+                            <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
                             <span>Colaborador</span>
                           </>
                         )}
@@ -508,22 +545,51 @@ export const Users: React.FC = () => {
                   </datalist>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-500 uppercase tracking-wide">Sede / Filial</label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-600 text-xs uppercase tracking-wide">Sede / Filial</label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setLocation("Pátio 1")}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
+                          location === "Pátio 1"
+                            ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                            : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                        }`}
+                      >
+                        Pátio 1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLocation("Pátio 2")}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
+                          location === "Pátio 2"
+                            ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                            : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                        }`}
+                      >
+                        Pátio 2
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     required
                     list="add-locations"
-                    placeholder="Ex: Rio de Janeiro"
+                    placeholder="Pátio 1, Pátio 2 ou digite outra filial..."
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs bg-white"
                   />
                   <datalist id="add-locations">
                     {uniqueLocations.map(loc => (
                       <option key={loc} value={loc} />
                     ))}
                   </datalist>
+                  <span className="text-[10px] text-slate-400 block">
+                    Disponível <strong>Pátio 1</strong>, <strong>Pátio 2</strong> ou você pode digitar livremente.
+                  </span>
                 </div>
               </div>
 
@@ -536,19 +602,81 @@ export const Users: React.FC = () => {
                 sublabel="Selecione um arquivo do dispositivo, informe um link ou escolha um preset"
               />
 
-              {/* Is Admin Permission Checkbox */}
-              <div className="flex items-center gap-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl mt-3">
-                <input
-                  type="checkbox"
-                  id="isAdmin"
-                  checked={isAdmin}
-                  onChange={(e) => setIsAdmin(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer accent-blue-600"
-                />
-                <label htmlFor="isAdmin" className="cursor-pointer select-none">
-                  <span className="font-bold text-slate-700 block">Privilégios de Administrador</span>
-                  <span className="text-[10px] text-slate-400 leading-normal block">Atribuir controle total para cadastrar e gerenciar ativos de TI.</span>
+              {/* Atribuição de Privilégios & Nível de Acesso */}
+              <div className="space-y-2 mt-4 pt-3 border-t border-slate-100">
+                <label className="font-bold text-slate-700 text-xs uppercase tracking-wide block">
+                  Atribuição de Privilégios de Acesso
                 </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* Administrador */}
+                  <div
+                    onClick={() => setPrivilege("admin")}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      privilege === "admin"
+                        ? "bg-indigo-50/80 border-indigo-300 ring-1 ring-indigo-400 shadow-xs"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                          <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Administrador</span>
+                        </div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded">Total</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Acesso total: gerenciar usuários, deletar dados e auditar o sistema.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Operador */}
+                  <div
+                    onClick={() => setPrivilege("operator")}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      privilege === "operator"
+                        ? "bg-blue-50/80 border-blue-300 ring-1 ring-blue-400 shadow-xs"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                          <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Operador</span>
+                        </div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Operar</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Permissões básicas: registrar, consultar e movimentar ativos e consumíveis.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Colaborador */}
+                  <div
+                    onClick={() => setPrivilege("user")}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      privilege === "user"
+                        ? "bg-slate-100 border-slate-300 ring-1 ring-slate-400 shadow-xs"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                          <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Colaborador</span>
+                        </div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Consulta</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Acesso padrão: visualizar inventário e ativos sob sua custódia.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
@@ -642,22 +770,51 @@ export const Users: React.FC = () => {
                   </datalist>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-500 uppercase tracking-wide">Sede / Filial</label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-600 text-xs uppercase tracking-wide">Sede / Filial</label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setLocation("Pátio 1")}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
+                          location === "Pátio 1"
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                            : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                        }`}
+                      >
+                        Pátio 1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLocation("Pátio 2")}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
+                          location === "Pátio 2"
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                            : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                        }`}
+                      >
+                        Pátio 2
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     required
                     list="edit-locations"
-                    placeholder="Ex: Rio de Janeiro"
+                    placeholder="Pátio 1, Pátio 2 ou digite outra filial..."
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600 text-xs bg-white"
                   />
                   <datalist id="edit-locations">
                     {uniqueLocations.map(loc => (
                       <option key={loc} value={loc} />
                     ))}
                   </datalist>
+                  <span className="text-[10px] text-slate-400 block">
+                    Disponível <strong>Pátio 1</strong>, <strong>Pátio 2</strong> ou você pode digitar livremente.
+                  </span>
                 </div>
               </div>
 
@@ -670,19 +827,81 @@ export const Users: React.FC = () => {
                 sublabel="Carregue uma foto do computador, cole um link ou selecione um preset"
               />
 
-              {/* Is Admin Permission Checkbox */}
-              <div className="flex items-center gap-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl mt-3">
-                <input
-                  type="checkbox"
-                  id="editIsAdmin"
-                  checked={isAdmin}
-                  onChange={(e) => setIsAdmin(e.target.checked)}
-                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer accent-indigo-600"
-                />
-                <label htmlFor="editIsAdmin" className="cursor-pointer select-none">
-                  <span className="font-bold text-slate-700 block">Privilégios de Administrador</span>
-                  <span className="text-[10px] text-slate-400 leading-normal block">Atribuir controle total para cadastrar e gerenciar ativos de TI.</span>
+              {/* Atribuição de Privilégios & Nível de Acesso */}
+              <div className="space-y-2 mt-4 pt-3 border-t border-slate-100">
+                <label className="font-bold text-slate-700 text-xs uppercase tracking-wide block">
+                  Atribuição de Privilégios de Acesso
                 </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* Administrador */}
+                  <div
+                    onClick={() => setPrivilege("admin")}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      privilege === "admin"
+                        ? "bg-indigo-50/80 border-indigo-300 ring-1 ring-indigo-400 shadow-xs"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                          <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Administrador</span>
+                        </div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded">Total</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Acesso total: gerenciar usuários, deletar dados e auditar o sistema.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Operador */}
+                  <div
+                    onClick={() => setPrivilege("operator")}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      privilege === "operator"
+                        ? "bg-blue-50/80 border-blue-300 ring-1 ring-blue-400 shadow-xs"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                          <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Operador</span>
+                        </div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Operar</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Permissões básicas: registrar, consultar e movimentar ativos e consumíveis.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Colaborador */}
+                  <div
+                    onClick={() => setPrivilege("user")}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                      privilege === "user"
+                        ? "bg-slate-100 border-slate-300 ring-1 ring-slate-400 shadow-xs"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                          <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Colaborador</span>
+                        </div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Consulta</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-tight">
+                        Acesso padrão: visualizar inventário e ativos sob sua custódia.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
