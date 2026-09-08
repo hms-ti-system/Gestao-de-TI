@@ -39,9 +39,10 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
   onClose,
   asset,
 }) => {
-  const { users, assets, updateAsset, showToast } = useApp();
+  const { users, assets, updateAsset, updateAssetTag, showToast } = useApp();
 
   // Form states initialized with existing asset data
+  const [tagNumber, setTagNumber] = useState(asset.id || "");
   const [name, setName] = useState(asset.name || "");
   const [manufacturer, setManufacturer] = useState(asset.manufacturer || "");
   const [model, setModel] = useState(asset.model || "");
@@ -75,6 +76,7 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
   // Sync state whenever selected asset changes
   useEffect(() => {
     if (asset) {
+      setTagNumber(asset.id || "");
       setName(asset.name || "");
       setManufacturer(asset.manufacturer || "");
       setModel(asset.model || "");
@@ -271,6 +273,25 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
       supplier: supplier.trim() || undefined,
     };
 
+    const cleanTag = tagNumber.trim();
+    if (!cleanTag) {
+      showToast("Validação", "O número da TAG / Plaqueta não pode estar vazio.", "warning");
+      return;
+    }
+
+    if (cleanTag.toUpperCase() !== asset.id.toUpperCase()) {
+      const isTaken = assets.some((a) => a.id.toUpperCase() === cleanTag.toUpperCase());
+      if (isTaken) {
+        showToast("TAG Duplicada", `A TAG "${cleanTag}" já pertence a outro ativo.`, "warning");
+        return;
+      }
+      const success = updateAssetTag(asset.id, cleanTag, updatedData);
+      if (success) {
+        onClose();
+      }
+      return;
+    }
+
     updateAsset(asset.id, updatedData);
     onClose();
   };
@@ -459,6 +480,40 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Identificação Patrimonial: Plaqueta / TAG */}
+            <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-blue-900 flex items-center gap-1.5 uppercase tracking-wide">
+                  <Tag className="w-3.5 h-3.5 text-blue-600" />
+                  Número da TAG / Plaqueta Patrimonial
+                </label>
+                <span className="text-[10px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">
+                  Código da Plaqueta Física
+                </span>
+              </div>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  required
+                  placeholder="ex: 000964 ou TAG-2024-001"
+                  value={tagNumber}
+                  onChange={(e) => setTagNumber(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-white border border-blue-200 rounded-lg text-slate-900 font-mono font-bold text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                />
+                {tagNumber.trim() !== asset.id && (
+                  <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1.5 rounded-lg font-bold whitespace-nowrap">
+                    A TAG será alterada
+                  </span>
+                )}
+              </div>
+              {tagNumber.trim() !== asset.id && assets.some((a) => a.id.toUpperCase() === tagNumber.trim().toUpperCase()) && (
+                <p className="text-[11px] text-red-600 font-bold flex items-center gap-1 mt-1">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  Aviso: Já existe outro ativo cadastrado com a TAG "{tagNumber.trim()}".
+                </p>
+              )}
             </div>
 
             {/* Informações Principais */}

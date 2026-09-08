@@ -14,14 +14,30 @@ import {
   Boxes,
   HelpCircle,
   TrendingUp,
-  Activity
+  Activity,
+  Pencil,
+  Trash2,
+  AlertTriangle
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Consumable } from "../types";
 
 export const Consumables: React.FC = () => {
-  const { consumables, checkoutConsumable, addConsumable, showToast } = useApp();
+  const { 
+    consumables, 
+    checkoutConsumable, 
+    addConsumable, 
+    updateConsumable, 
+    deleteConsumable, 
+    currentUser, 
+    showToast 
+  } = useApp();
+
+  const isAdmin = currentUser?.isAdmin || currentUser?.id === "user-admin" || currentUser?.role?.toLowerCase().includes("admin");
+
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingConsumable, setEditingConsumable] = useState<Consumable | null>(null);
+  const [deletingConsumable, setDeletingConsumable] = useState<Consumable | null>(null);
 
   // Add consumable form state
   const [name, setName] = useState("");
@@ -30,6 +46,14 @@ export const Consumables: React.FC = () => {
   const [qtyRemaining, setQtyRemaining] = useState(10);
   const [qtyTotal, setQtyTotal] = useState(50);
   const [iconName, setIconName] = useState<Consumable["iconName"]>("keyboard");
+
+  // Edit consumable form state
+  const [editName, setEditName] = useState("");
+  const [editCategory, setEditCategory] = useState("Impressoras");
+  const [editDescription, setEditDescription] = useState("");
+  const [editQtyRemaining, setEditQtyRemaining] = useState(10);
+  const [editQtyTotal, setEditQtyTotal] = useState(50);
+  const [editIconName, setEditIconName] = useState<Consumable["iconName"]>("keyboard");
 
   // Calculations
   const totalItems = consumables.reduce((sum, c) => sum + c.quantityRemaining, 0);
@@ -45,6 +69,20 @@ export const Consumables: React.FC = () => {
       case "mouse": return Mouse;
       default: return Power;
     }
+  };
+
+  const handleOpenAddModal = () => {
+    if (!isAdmin) {
+      showToast("Acesso Restrito", "Apenas administradores podem cadastrar novos consumíveis no sistema.", "warning");
+      return;
+    }
+    setName("");
+    setDescription("");
+    setCategory("Impressoras");
+    setQtyRemaining(10);
+    setQtyTotal(50);
+    setIconName("keyboard");
+    setShowAddModal(true);
   };
 
   const handleCreateConsumable = (e: React.FormEvent) => {
@@ -68,6 +106,47 @@ export const Consumables: React.FC = () => {
     setDescription("");
   };
 
+  const handleStartEdit = (item: Consumable) => {
+    if (!isAdmin) {
+      showToast("Acesso Restrito", "Apenas administradores podem editar consumíveis.", "warning");
+      return;
+    }
+    setEditingConsumable(item);
+    setEditName(item.name);
+    setEditCategory(item.category);
+    setEditDescription(item.description);
+    setEditQtyRemaining(item.quantityRemaining);
+    setEditQtyTotal(item.quantityTotal);
+    setEditIconName(item.iconName);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingConsumable) return;
+
+    if (editQtyRemaining > editQtyTotal) {
+      showToast("Erro de Validação", "A quantidade restante não pode exceder a quantidade total.", "warning");
+      return;
+    }
+
+    updateConsumable(editingConsumable.id, {
+      name: editName,
+      category: editCategory,
+      description: editDescription,
+      quantityRemaining: Number(editQtyRemaining),
+      quantityTotal: Number(editQtyTotal),
+      iconName: editIconName,
+    });
+
+    setEditingConsumable(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deletingConsumable) return;
+    deleteConsumable(deletingConsumable.id);
+    setDeletingConsumable(null);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* View Header */}
@@ -77,7 +156,7 @@ export const Consumables: React.FC = () => {
           <p className="text-sm text-slate-400 font-medium mt-1">Monitore e dispense acessórios de escritório e periféricos de rápida substituição.</p>
         </div>
         <button 
-          onClick={() => setShowAddModal(true)}
+          onClick={handleOpenAddModal}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/10"
         >
           <Plus className="w-4 h-4" />
@@ -142,17 +221,46 @@ export const Consumables: React.FC = () => {
                     <Icon className="w-6 h-6 text-slate-700" />
                   </div>
 
-                  <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${
-                    item.status === "Disponível"
-                      ? "bg-green-50 text-green-700 border-green-200"
-                      : item.status === "Estoque Médio"
-                      ? "bg-blue-50 text-blue-700 border-blue-200"
-                      : item.status === "Estoque Baixo"
-                      ? "bg-amber-50 text-amber-700 border-amber-200"
-                      : "bg-red-50 text-red-700 border-red-200"
-                  }`}>
-                    {item.status}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                      item.status === "Disponível"
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : item.status === "Estoque Médio"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : item.status === "Estoque Baixo"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-red-50 text-red-700 border-red-200"
+                    }`}>
+                      {item.status}
+                    </span>
+
+                    {isAdmin && (
+                      <div className="flex items-center gap-0.5 ml-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEdit(item);
+                          }}
+                          className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                          title="Editar Consumível (Administrador)"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingConsumable(item);
+                          }}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title="Excluir Consumível (Administrador)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-4">
@@ -203,7 +311,7 @@ export const Consumables: React.FC = () => {
 
         {/* Dash block to Register New Consumable */}
         <div 
-          onClick={() => setShowAddModal(true)}
+          onClick={handleOpenAddModal}
           className="border-2 border-dashed border-slate-200 hover:border-blue-500 hover:bg-blue-50/20 rounded-2xl p-6 transition-all duration-200 flex flex-col items-center justify-center h-[230px] cursor-pointer group"
         >
           <div className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center text-slate-400 group-hover:scale-105 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all">
@@ -324,12 +432,192 @@ export const Consumables: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm"
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
                 >
                   Adicionar ao Estoque
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* EDIT CONSUMABLE MODAL (Administrador) */}
+      {editingConsumable && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-100"
+          >
+            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+              <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                <Pencil className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900">Editar Consumível</h4>
+                <p className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Permissão de Administrador</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-500 uppercase tracking-wide">Nome do Item</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Categoria</label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  >
+                    <option value="Impressoras">Impressoras</option>
+                    <option value="Cabos">Cabos & Conexões</option>
+                    <option value="Periféricos">Periféricos</option>
+                    <option value="Adaptadores">Adaptadores</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Ícone do Cartão</label>
+                  <select
+                    value={editIconName}
+                    onChange={(e) => setEditIconName(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  >
+                    <option value="keyboard">Teclado</option>
+                    <option value="mouse">Mouse</option>
+                    <option value="print">Impressora</option>
+                    <option value="settings_input_hdmi">Cabo / Conector</option>
+                    <option value="power">Adaptador de Tomada</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-500 uppercase tracking-wide">Descrição Curta</label>
+                <input
+                  type="text"
+                  required
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Quantidade Restante</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={editQtyRemaining}
+                    onChange={(e) => setEditQtyRemaining(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Estoque Total Máximo</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editQtyTotal}
+                    onChange={(e) => setEditQtyTotal(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingConsumable(null)}
+                  className="px-4 py-2 font-bold text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* DELETE CONSUMABLE CONFIRMATION MODAL (Administrador) */}
+      {deletingConsumable && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-200"
+          >
+            <div className="flex items-center gap-3 mb-4 text-red-600">
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-base">Excluir Consumível</h4>
+                <p className="text-xs text-slate-500 font-medium">Permissão: Administrador</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed mb-3">
+              Tem certeza de que deseja excluir o consumível{" "}
+              <strong className="text-slate-900 font-bold">{deletingConsumable.name}</strong> do inventário?
+            </p>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 mb-4 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Categoria:</span>
+                <span className="font-bold text-slate-800">{deletingConsumable.category}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Estoque atual:</span>
+                <span className="font-mono font-bold text-blue-600">{deletingConsumable.quantityRemaining} de {deletingConsumable.quantityTotal} un.</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status:</span>
+                <span className="font-semibold text-slate-700">{deletingConsumable.status}</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 mb-5">
+              <strong>Atenção:</strong> O item será excluído permanentemente do banco de dados e do controle de saídas.
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingConsumable(null)}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-sm shadow-red-500/20"
+              >
+                Sim, Excluir Item
+              </button>
+            </div>
           </motion.div>
         </div>
       )}

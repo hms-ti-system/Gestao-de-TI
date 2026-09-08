@@ -117,10 +117,15 @@ interface AppContextType {
   checkinAsset: (assetId: string, status: "Disponível" | "Atribuído" | "Manutenção", condition: string, location: string, notes: string) => void;
   runDiagnostics: (assetId: string) => void;
   addConsumable: (consumable: Omit<Consumable, "id" | "status">) => void;
+  updateConsumable: (id: string, updatedData: Partial<Consumable>) => void;
+  deleteConsumable: (id: string) => void;
   checkoutConsumable: (id: string) => void;
   addLicense: (license: Omit<License, "id">) => void;
+  updateLicense: (id: string, updatedData: Partial<License>) => void;
+  deleteLicense: (id: string) => void;
   addAsset: (asset: Omit<Asset, "id" | "health"> & { id?: string }) => void;
   updateAsset: (id: string, updatedData: Partial<Asset>) => void;
+  updateAssetTag: (oldTag: string, newTag: string, extraUpdates?: Partial<Asset>) => boolean;
   deleteAsset: (id: string) => void;
   addUser: (user: Omit<User, "id">) => void;
   updateUser: (id: string, updatedData: Partial<User>) => void;
@@ -855,6 +860,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast("Item Cadastrado", `${consumable.name} adicionado ao estoque.`, "success");
   };
 
+  // Update Consumable
+  const updateConsumable = (id: string, updatedData: Partial<Consumable>) => {
+    setConsumables((prev) =>
+      prev.map((c) => {
+        if (c.id === id) {
+          const updated: Consumable = { ...c, ...updatedData };
+          if (updatedData.quantityRemaining !== undefined || updatedData.quantityTotal !== undefined) {
+            const ratio = updated.quantityRemaining / (updated.quantityTotal || 1);
+            if (ratio <= 0.05) updated.status = "Crítico";
+            else if (ratio <= 0.2) updated.status = "Estoque Baixo";
+            else if (ratio <= 0.5) updated.status = "Estoque Médio";
+            else updated.status = "Disponível";
+          }
+          persistSave("consumables", updated);
+          return updated;
+        }
+        return c;
+      })
+    );
+
+    const targetName = updatedData.name || id;
+    const newActivity: Activity = {
+      id: Date.now().toString(),
+      title: `${currentUser?.name || "Admin"} atualizou o consumível ${targetName}`,
+      user: currentUser?.name || "Admin",
+      action: "Edição Consumível",
+      target: targetName,
+      time: "Agora mesmo",
+      type: "administrativo",
+      category: "Consumíveis",
+    };
+    setActivities((prev) => [newActivity, ...prev]);
+    persistSave("activities", newActivity);
+
+    showToast("Consumível Atualizado", `Dados do item salvos com sucesso.`, "success");
+  };
+
+  // Delete Consumable
+  const deleteConsumable = (id: string) => {
+    const itemToDelete = consumables.find((c) => c.id === id);
+    if (!itemToDelete) return;
+
+    setConsumables((prev) => prev.filter((c) => c.id !== id));
+    persistDelete("consumables", id);
+
+    const newActivity: Activity = {
+      id: Date.now().toString(),
+      title: `${currentUser?.name || "Admin"} removeu o consumível ${itemToDelete.name}`,
+      user: currentUser?.name || "Admin",
+      action: "Exclusão Consumível",
+      target: itemToDelete.name,
+      time: "Agora mesmo",
+      type: "administrativo",
+      category: "Consumíveis",
+    };
+    setActivities((prev) => [newActivity, ...prev]);
+    persistSave("activities", newActivity);
+
+    showToast("Consumível Excluído", `${itemToDelete.name} foi removido do estoque.`, "success");
+  };
+
   // Add License
   const addLicense = (license: Omit<License, "id">) => {
     const id = "LIC-" + (2024 + licenses.length).toString() + "-" + Math.floor(Math.random() * 900 + 100);
@@ -865,6 +931,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLicenses((prev) => [newItem, ...prev]);
     persistSave("licenses", newItem);
     showToast("Licença Registrada", `${license.name} foi cadastrada com sucesso.`, "success");
+  };
+
+  // Update License
+  const updateLicense = (id: string, updatedData: Partial<License>) => {
+    setLicenses((prev) =>
+      prev.map((l) => {
+        if (l.id === id) {
+          const updated: License = { ...l, ...updatedData };
+          persistSave("licenses", updated);
+          return updated;
+        }
+        return l;
+      })
+    );
+
+    const targetName = updatedData.name || id;
+    const newActivity: Activity = {
+      id: Date.now().toString(),
+      title: `${currentUser?.name || "Admin"} atualizou a assinatura ${targetName}`,
+      user: currentUser?.name || "Admin",
+      action: "Edição Licença",
+      target: targetName,
+      time: "Agora mesmo",
+      type: "administrativo",
+      category: "Licenças",
+    };
+    setActivities((prev) => [newActivity, ...prev]);
+    persistSave("activities", newActivity);
+
+    showToast("Licença Atualizada", `Dados da licença salvos com sucesso.`, "success");
+  };
+
+  // Delete License
+  const deleteLicense = (id: string) => {
+    const itemToDelete = licenses.find((l) => l.id === id);
+    if (!itemToDelete) return;
+
+    setLicenses((prev) => prev.filter((l) => l.id !== id));
+    persistDelete("licenses", id);
+
+    const newActivity: Activity = {
+      id: Date.now().toString(),
+      title: `${currentUser?.name || "Admin"} removeu a assinatura ${itemToDelete.name}`,
+      user: currentUser?.name || "Admin",
+      action: "Exclusão Licença",
+      target: itemToDelete.name,
+      time: "Agora mesmo",
+      type: "administrativo",
+      category: "Licenças",
+    };
+    setActivities((prev) => [newActivity, ...prev]);
+    persistSave("activities", newActivity);
+
+    showToast("Licença Excluída", `${itemToDelete.name} foi removida do sistema.`, "success");
   };
 
   // Add Asset
@@ -947,6 +1067,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     persistSave("activities", newActivity);
 
     showToast("Ativo Atualizado", `As alterações no ativo foram salvas com sucesso.`, "success");
+  };
+
+  // Update Asset TAG / Plaqueta
+  const updateAssetTag = (oldTag: string, newTag: string, extraUpdates?: Partial<Asset>): boolean => {
+    const cleanOld = oldTag.trim();
+    const cleanNew = newTag.trim();
+
+    if (!cleanNew) {
+      showToast("Validação", "O número da TAG / Plaqueta não pode estar vazio.", "warning");
+      return false;
+    }
+
+    // Check if newTag is taken by another asset
+    if (cleanNew.toUpperCase() !== cleanOld.toUpperCase()) {
+      const exists = assets.some((a) => a.id.toUpperCase() === cleanNew.toUpperCase());
+      if (exists) {
+        showToast("TAG Duplicada", `Já existe outro ativo cadastrado com a TAG "${cleanNew}".`, "warning");
+        return false;
+      }
+    }
+
+    const currentAsset = assets.find((a) => a.id.toUpperCase() === cleanOld.toUpperCase());
+    if (!currentAsset) {
+      showToast("Erro", "Ativo original não localizado para alteração da plaqueta.", "error");
+      return false;
+    }
+
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" });
+    const formattedTime = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+    const timelineEvent: TimelineEvent = {
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
+      title: "Plaqueta / TAG Atualizada",
+      date: `${formattedDate} às ${formattedTime}`,
+      description: cleanNew !== cleanOld 
+        ? `Número da TAG patrimonial alterado de "${cleanOld}" para "${cleanNew}" por ${currentUser?.name || "Admin"}.`
+        : `Identificação da plaqueta patrimonial atualizada por ${currentUser?.name || "Admin"}.`,
+      type: "info",
+      user: currentUser?.name || "Admin",
+    };
+
+    const updatedAsset: Asset = {
+      ...currentAsset,
+      ...extraUpdates,
+      id: cleanNew,
+      history: [timelineEvent, ...(currentAsset.history || [])],
+    };
+
+    // If tag changed, delete old document from Firestore and persist new document
+    if (cleanNew !== cleanOld) {
+      persistDelete("assets", cleanOld);
+    }
+    persistSave("assets", updatedAsset);
+
+    setAssets((prev) => prev.map((a) => (a.id.toUpperCase() === cleanOld.toUpperCase() ? updatedAsset : a)));
+
+    const newActivity: Activity = {
+      id: Date.now().toString(),
+      title: `${currentUser?.name || "Admin"} atualizou a TAG de ${cleanOld} para ${cleanNew}`,
+      user: currentUser?.name || "Admin",
+      action: "Edição Plaqueta",
+      target: cleanNew,
+      details: `Ativo: ${updatedAsset.name} | Nova TAG: ${cleanNew}`,
+      time: "Agora mesmo",
+      type: "administrativo",
+      category: "Inventário",
+    };
+    setActivities((prev) => [newActivity, ...prev]);
+    persistSave("activities", newActivity);
+
+    showToast("Plaqueta Atualizada!", `A TAG do ativo foi alterada com sucesso para "${cleanNew}".`, "success");
+    return true;
   };
 
   // Delete Asset
@@ -1150,10 +1343,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         checkinAsset,
         runDiagnostics,
         addConsumable,
+        updateConsumable,
+        deleteConsumable,
         checkoutConsumable,
         addLicense,
+        updateLicense,
+        deleteLicense,
         addAsset,
         updateAsset,
+        updateAssetTag,
         deleteAsset,
         addUser,
         updateUser,

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Activity } from "../types";
+import { QrScannerModal } from "../components/QrScannerModal";
 import {
   ResponsiveContainer,
   PieChart,
@@ -729,67 +730,37 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* Floating Scan Barcode Action Button */}
+      {/* Floating Scan Plaque / TAG Action Button */}
       <button 
         onClick={() => setShowQrModal(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40 group cursor-pointer border border-slate-800"
-        title="Simular Leitura de Ativo por QR / Código de Barras"
+        className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-40 group cursor-pointer border-2 border-white/80 shadow-blue-600/40"
+        title="Escanear Plaqueta / TAG com a Câmera"
       >
         <QrCode className="w-6 h-6 text-white" />
-        <span className="absolute right-full mr-3 bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
-          Simular Scan de Ativo
+        <span className="absolute right-full mr-3 bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-lg">
+          Escanear Plaqueta / TAG
         </span>
       </button>
 
-      {/* QR/Tag Simulator Modal */}
+      {/* Real QR & Plaque Scanner Modal */}
       {showQrModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-xl max-w-sm w-full p-6 shadow-2xl border border-slate-100"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                <QrCode className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-900">Simulador de Código de Barras</h4>
-                <p className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Leitura de Etiqueta Física</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-500 leading-relaxed mb-6">
-              Digite a Etiqueta de Patrimônio do Ativo (ex: <code className="bg-slate-100 font-mono px-1 rounded font-bold text-slate-800">TAG-2023-0842</code> ou <code className="bg-slate-100 font-mono px-1 rounded font-bold text-slate-800">ASSET-2938</code>) para simular o escaneamento por câmera.
-            </p>
-
-            <form onSubmit={handleQrSubmit} className="space-y-4">
-              <input
-                type="text"
-                required
-                placeholder="TAG-2023-0842"
-                value={scannedTag}
-                onChange={(e) => setScannedTag(e.target.value)}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-800 outline-none focus:border-blue-600 font-mono"
-              />
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowQrModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-800 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors"
-                >
-                  Confirmar Scan
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
+        <QrScannerModal
+          isOpen={showQrModal}
+          onClose={() => setShowQrModal(false)}
+          mode="lookup"
+          title="Escanear Plaqueta Patrimonial"
+          subtitle="Aponte a câmera para a plaqueta física do ativo ou carregue uma imagem do QR Code"
+          onAssetFound={(assetId) => {
+            setSelectedAssetId(assetId);
+            setCurrentView("asset-detail");
+            setShowQrModal(false);
+          }}
+          onRegisterNewAssetWithTag={(tag) => {
+            setCurrentView("assets");
+            setShowQrModal(false);
+            showToast("Nova TAG Detectada", `A TAG "${tag}" pode ser cadastrada agora.`, "info");
+          }}
+        />
       )}
     </div>
   );

@@ -70,11 +70,15 @@ export const Assets: React.FC<AssetsProps> = ({
   const { 
     assets, 
     users, 
+    currentUser,
     addAsset, 
+    deleteAsset,
     checkoutAsset, 
     checkinAsset, 
     showToast 
   } = useApp();
+
+  const isAdmin = currentUser?.isAdmin || currentUser?.id === "user-admin" || currentUser?.role?.toLowerCase().includes("admin");
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -85,6 +89,7 @@ export const Assets: React.FC<AssetsProps> = ({
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [showCheckinModal, setShowCheckinModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [assetToDelete, setAssetToDelete] = useState<Asset | null>(null);
   const [activeAssetId, setActiveAssetId] = useState("");
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; subtitle?: string } | null>(null);
   const [showScannerModal, setShowScannerModal] = useState(false);
@@ -184,6 +189,10 @@ export const Assets: React.FC<AssetsProps> = ({
   };
 
   const handleOpenAddModal = () => {
+    if (!isAdmin) {
+      showToast("Acesso Restrito", "Apenas administradores podem cadastrar novos ativos no sistema.", "warning");
+      return;
+    }
     resetAddForm();
     const autoTag = "TAG-" + new Date().getFullYear() + "-" + Math.floor(Math.random() * 9000 + 1000);
     setNewTagId(autoTag);
@@ -870,12 +879,27 @@ export const Assets: React.FC<AssetsProps> = ({
                           <Eye className="w-4 h-4" />
                         </button>
                         <button 
-                          onClick={() => setEditingAsset(asset)}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-                          title="Editar Ativo"
+                          onClick={() => {
+                            if (!isAdmin) {
+                              showToast("Acesso Restrito", "Apenas administradores podem editar ativos.", "warning");
+                              return;
+                            }
+                            setEditingAsset(asset);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors cursor-pointer"
+                          title={isAdmin ? "Editar Ativo (Administrador)" : "Apenas administradores podem editar"}
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
+                        {isAdmin && (
+                          <button 
+                            onClick={() => setAssetToDelete(asset)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                            title="Excluir Ativo (Administrador)"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1620,6 +1644,74 @@ export const Assets: React.FC<AssetsProps> = ({
           onClose={() => setTagModalAsset(null)}
           asset={tagModalAsset}
         />
+      )}
+
+      {/* MODAL: Excluir Ativo (Administrador) */}
+      {assetToDelete && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-200"
+          >
+            <div className="flex items-center gap-3 mb-4 text-red-600">
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-base">Confirmar Exclusão de Ativo</h4>
+                <p className="text-xs text-slate-500 font-medium">Permissão: Administrador</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed mb-3">
+              Tem certeza de que deseja remover permanentemente este ativo do inventário?
+            </p>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 mb-4 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Nome:</span>
+                <span className="font-bold text-slate-800">{assetToDelete.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">TAG / Patrimônio:</span>
+                <span className="font-mono font-bold text-blue-600">{assetToDelete.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Número de Série:</span>
+                <span className="font-mono text-slate-700">{assetToDelete.seriesNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status atual:</span>
+                <span className="font-semibold text-slate-700">{assetToDelete.status}</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 mb-5">
+              <strong>Atenção:</strong> Esta ação removerá o registro do Firestore e cancelará todas as vinculações e histórico deste ativo.
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAssetToDelete(null)}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteAsset(assetToDelete.id);
+                  setAssetToDelete(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-sm shadow-red-500/20"
+              >
+                Sim, Excluir Ativo
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   );

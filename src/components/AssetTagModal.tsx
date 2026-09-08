@@ -1,32 +1,36 @@
 import React, { useState, useEffect } from "react";
 import QRCode from "qrcode";
-import { X, Printer, Download, QrCode, Tag, Check, Laptop, Copy, Sparkles, LayoutGrid } from "lucide-react";
+import { X, Printer, Download, QrCode, Tag, Check, Laptop, Copy, Sparkles, LayoutGrid, Info } from "lucide-react";
 import { motion } from "motion/react";
 import { Asset } from "../types";
-import { PhysicalAssetPlaque } from "./PhysicalAssetPlaque";
+import { PhysicalAssetPlaque, buildAssetQrPayload } from "./PhysicalAssetPlaque";
 
 interface AssetTagModalProps {
   isOpen: boolean;
   onClose: () => void;
   asset: Partial<Asset> & { id: string; name: string };
+  onEditTag?: () => void;
 }
 
 export const AssetTagModal: React.FC<AssetTagModalProps> = ({
   isOpen,
   onClose,
   asset,
+  onEditTag,
 }) => {
   const [tagStyle, setTagStyle] = useState<"plaque" | "detailed">("plaque");
+  const [qrMode, setQrMode] = useState<"complete" | "url" | "tag">("complete");
   const [qrUrl, setQrUrl] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
+  const qrData = buildAssetQrPayload(asset.id, asset, asset.name, qrMode);
+
   useEffect(() => {
     if (asset?.id) {
-      // Encode key asset identification info into QR
-      const qrData = asset.id;
       QRCode.toDataURL(qrData, {
         width: 320,
         margin: 1,
+        errorCorrectionLevel: "M",
         color: {
           dark: "#0f172a",
           light: "#ffffff",
@@ -35,7 +39,7 @@ export const AssetTagModal: React.FC<AssetTagModalProps> = ({
         .then((url) => setQrUrl(url))
         .catch((err) => console.error("Error generating QR:", err));
     }
-  }, [asset?.id, asset?.name, asset?.seriesNumber]);
+  }, [asset?.id, qrData]);
 
   if (!isOpen) return null;
 
@@ -146,10 +150,12 @@ export const AssetTagModal: React.FC<AssetTagModalProps> = ({
             <div id="printable-asset-tag">
               <PhysicalAssetPlaque
                 tagNumber={asset.id}
+                asset={asset as Asset}
                 assetName={asset.name}
                 companyName="isis"
                 subTitle="Transportes e Terminais"
                 size="md"
+                qrMode={qrMode}
                 showActions={false}
               />
             </div>
@@ -247,17 +253,86 @@ export const AssetTagModal: React.FC<AssetTagModalProps> = ({
           )}
         </div>
 
+        {/* Formato de Dados do QR Code */}
+        <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3 space-y-1.5 print:hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
+              <QrCode className="w-3.5 h-3.5 text-blue-600" />
+              Conteúdo Gravado no QR Code
+            </span>
+            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+              {qrMode === "complete" ? "Dados Completos + Link" : qrMode === "url" ? "Apenas Link" : "Apenas TAG"}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5 pt-1">
+            <button
+              type="button"
+              onClick={() => setQrMode("complete")}
+              className={`py-1.5 px-2 rounded-lg text-[10px] font-bold transition-all text-center cursor-pointer border ${
+                qrMode === "complete"
+                  ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              Ficha Completa
+            </button>
+            <button
+              type="button"
+              onClick={() => setQrMode("url")}
+              className={`py-1.5 px-2 rounded-lg text-[10px] font-bold transition-all text-center cursor-pointer border ${
+                qrMode === "url"
+                  ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              Link Web
+            </button>
+            <button
+              type="button"
+              onClick={() => setQrMode("tag")}
+              className={`py-1.5 px-2 rounded-lg text-[10px] font-bold transition-all text-center cursor-pointer border ${
+                qrMode === "tag"
+                  ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              Apenas TAG
+            </button>
+          </div>
+          <p className="text-[9.5px] text-blue-800/80 leading-tight pt-0.5">
+            {qrMode === "complete" 
+              ? "Ao ler com a câmera de qualquer celular ou leitor, exibe todas as informações do ativo (nome, modelo, S/N, status, responsável, local) mais o link da ficha online."
+              : qrMode === "url"
+              ? "Gera um link direto que abre a ficha do ativo no navegador do dispositivo escaneador."
+              : "Codifica estritamente o código numérico da TAG."}
+          </p>
+        </div>
+
         {/* Tag metadata and tips */}
         <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs text-slate-600 space-y-1.5 print:hidden">
           <div className="flex items-center justify-between">
             <span className="text-slate-400 font-bold uppercase text-[10px]">Código da TAG:</span>
-            <button
-              onClick={handleCopyTag}
-              className="flex items-center gap-1 font-mono font-bold text-blue-600 hover:text-blue-700 text-xs cursor-pointer"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{asset.id}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopyTag}
+                className="flex items-center gap-1 font-mono font-bold text-blue-600 hover:text-blue-700 text-xs cursor-pointer"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{asset.id}</span>
+              </button>
+              {onEditTag && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onEditTag();
+                  }}
+                  className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                >
+                  Editar TAG
+                </button>
+              )}
+            </div>
           </div>
           <p className="text-[10px] text-slate-400 leading-normal">
             Esta etiqueta pode ser impressa em impressora térmica ou papel adesivo padrão (dimensões ~90x50mm) para fixação no equipamento físico.

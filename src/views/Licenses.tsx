@@ -12,14 +12,28 @@ import {
   Zap,
   ShieldCheck,
   Percent,
-  Search
+  Search,
+  Pencil,
+  Trash2
 } from "lucide-react";
 import { motion } from "motion/react";
 import { License } from "../types";
 
 export const Licenses: React.FC = () => {
-  const { licenses, addLicense, showToast } = useApp();
+  const { 
+    licenses, 
+    addLicense, 
+    updateLicense, 
+    deleteLicense, 
+    currentUser, 
+    showToast 
+  } = useApp();
+
+  const isAdmin = currentUser?.isAdmin || currentUser?.id === "user-admin" || currentUser?.role?.toLowerCase().includes("admin");
+
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingLicense, setEditingLicense] = useState<License | null>(null);
+  const [deletingLicense, setDeletingLicense] = useState<License | null>(null);
   const [search, setSearch] = useState("");
   const [revealKeyId, setRevealKeyId] = useState<string | null>(null);
 
@@ -32,6 +46,17 @@ export const Licenses: React.FC = () => {
   const [expirationDate, setExpirationDate] = useState("2027-12-12");
   const [iconType, setIconType] = useState<License["iconType"]>("cloud");
 
+  // Edit license state
+  const [editName, setEditName] = useState("");
+  const [editSoftware, setEditSoftware] = useState("");
+  const [editSupplier, setEditSupplier] = useState("Adobe Systems");
+  const [editKey, setEditKey] = useState("");
+  const [editSeatsTotal, setEditSeatsTotal] = useState(10);
+  const [editSeatsUsed, setEditSeatsUsed] = useState(0);
+  const [editExpirationDate, setEditExpirationDate] = useState("2027-12-12");
+  const [editStatus, setEditStatus] = useState<License["status"]>("Ativo");
+  const [editIconType, setEditIconType] = useState<License["iconType"]>("cloud");
+
   // Calculations
   const totalSeats = licenses.reduce((sum, l) => sum + l.seatsTotal, 0);
   const totalUsed = licenses.reduce((sum, l) => sum + l.seatsUsed, 0);
@@ -39,6 +64,73 @@ export const Licenses: React.FC = () => {
   const estimatedCostK = totalSeats > 0 ? Math.round((totalSeats * 450) / 1000) : 0;
 
   const expiringSoon = licenses.filter(l => l.status === "Expira em 12 dias").length;
+
+  const handleOpenAddModal = () => {
+    if (!isAdmin) {
+      showToast("Acesso Restrito", "Apenas administradores podem cadastrar novas licenças de software.", "warning");
+      return;
+    }
+    setName("");
+    setSoftware("");
+    setSupplier("Adobe Systems");
+    setKey("");
+    setSeatsTotal(10);
+    setExpirationDate("2027-12-12");
+    setIconType("cloud");
+    setShowAddModal(true);
+  };
+
+  const handleStartEdit = (lic: License) => {
+    if (!isAdmin) {
+      showToast("Acesso Restrito", "Apenas administradores podem editar licenças.", "warning");
+      return;
+    }
+    setEditingLicense(lic);
+    setEditName(lic.name);
+    setEditSoftware(lic.software);
+    setEditSupplier(lic.supplier);
+    setEditKey(lic.key);
+    setEditSeatsTotal(lic.seatsTotal);
+    setEditSeatsUsed(lic.seatsUsed);
+    setEditExpirationDate(lic.expirationDate);
+    setEditStatus(lic.status);
+    setEditIconType(lic.iconType);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLicense) return;
+
+    if (editKey.trim() === "") {
+      showToast("Validação", "Por favor forneça uma chave de ativação válida.", "warning");
+      return;
+    }
+
+    if (editSeatsUsed > editSeatsTotal) {
+      showToast("Validação", "Assentos usados não podem ultrapassar os assentos totais.", "warning");
+      return;
+    }
+
+    updateLicense(editingLicense.id, {
+      name: editName,
+      software: editSoftware,
+      supplier: editSupplier,
+      key: editKey,
+      seatsTotal: Number(editSeatsTotal),
+      seatsUsed: Number(editSeatsUsed),
+      expirationDate: editExpirationDate,
+      status: editStatus,
+      iconType: editIconType,
+    });
+
+    setEditingLicense(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deletingLicense) return;
+    deleteLicense(deletingLicense.id);
+    setDeletingLicense(null);
+  };
 
   const handleCreateLicense = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,7 +252,7 @@ export const Licenses: React.FC = () => {
             <span>Exportar CSV</span>
           </button>
           <button 
-            onClick={() => setShowAddModal(true)}
+            onClick={handleOpenAddModal}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/10 active:scale-[0.98]"
           >
             <Plus className="w-4 h-4" />
@@ -239,13 +331,14 @@ export const Licenses: React.FC = () => {
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Software</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Chave de Ativação</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Acentos</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Assentos</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Status</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredLicenses.map((lic) => {
-                  const seatsPercent = Math.round((lic.seatsUsed / lic.seatsTotal) * 100);
+                  const seatsPercent = lic.seatsTotal > 0 ? Math.round((lic.seatsUsed / lic.seatsTotal) * 100) : 0;
                   const isRevealed = revealKeyId === lic.id;
                   
                   return (
@@ -263,7 +356,7 @@ export const Licenses: React.FC = () => {
                           </span>
                           <button
                             onClick={() => handleToggleReveal(lic.id)}
-                            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 transition-colors"
+                            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
                             title={isRevealed ? "Ocultar Chave" : "Exibir Chave de Ativação"}
                           >
                             {isRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -302,6 +395,32 @@ export const Licenses: React.FC = () => {
                         }`}>
                           {lic.status}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {isAdmin ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleStartEdit(lic)}
+                                className="p-1.5 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer"
+                                title="Editar Licença (Administrador)"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingLicense(lic)}
+                                className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition-colors cursor-pointer"
+                                title="Excluir Licença (Administrador)"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-slate-300">—</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -512,12 +631,218 @@ export const Licenses: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm"
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
                 >
                   Confirmar Registro
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* EDIT LICENSE MODAL (Administrador) */}
+      {editingLicense && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-100"
+          >
+            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+              <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                <Pencil className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900">Editar Licença</h4>
+                <p className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Permissão de Administrador</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Nome da Assinatura</label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Nome do Software</label>
+                  <input
+                    type="text"
+                    required
+                    value={editSoftware}
+                    onChange={(e) => setEditSoftware(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Distribuidor / Fornecedor</label>
+                  <select
+                    value={editSupplier}
+                    onChange={(e) => setEditSupplier(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  >
+                    <option value="Adobe Systems">Adobe Systems</option>
+                    <option value="Microsoft Inc.">Microsoft Inc.</option>
+                    <option value="Figma Corp.">Figma Corp.</option>
+                    <option value="JetBrains">JetBrains</option>
+                    <option value="Google Workspace">Google Workspace</option>
+                    <option value="Autodesk">Autodesk</option>
+                    <option value="Outro">Outro</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Status da Licença</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 font-semibold"
+                  >
+                    <option value="Ativo">Ativo</option>
+                    <option value="Expira em 12 dias">Expira em breve</option>
+                    <option value="Esgotado">Esgotado</option>
+                    <option value="Expirado">Expirado</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-500 uppercase tracking-wide">Chave Serial Secreta</label>
+                <input
+                  type="text"
+                  required
+                  value={editKey}
+                  onChange={(e) => setEditKey(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-mono text-slate-800 outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Assentos Totais</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editSeatsTotal}
+                    onChange={(e) => setEditSeatsTotal(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Assentos Usados</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={editSeatsUsed}
+                    onChange={(e) => setEditSeatsUsed(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Vencimento</label>
+                  <input
+                    type="date"
+                    required
+                    value={editExpirationDate}
+                    onChange={(e) => setEditExpirationDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingLicense(null)}
+                  className="px-4 py-2 font-bold text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* DELETE LICENSE CONFIRMATION MODAL (Administrador) */}
+      {deletingLicense && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-200"
+          >
+            <div className="flex items-center gap-3 mb-4 text-red-600">
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-base">Excluir Licença</h4>
+                <p className="text-xs text-slate-500 font-medium">Permissão: Administrador</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed mb-3">
+              Tem certeza de que deseja remover a licença{" "}
+              <strong className="text-slate-900 font-bold">{deletingLicense.name}</strong>?
+            </p>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 mb-4 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Software:</span>
+                <span className="font-bold text-slate-800">{deletingLicense.software}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Fornecedor:</span>
+                <span className="text-slate-700">{deletingLicense.supplier}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Ocupação:</span>
+                <span className="font-mono font-bold text-blue-600">{deletingLicense.seatsUsed} de {deletingLicense.seatsTotal} assentos</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 mb-5">
+              <strong>Atenção:</strong> Os dados e chave serial desta licença serão removidos permanentemente.
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingLicense(null)}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-sm shadow-red-500/20"
+              >
+                Sim, Excluir Licença
+              </button>
+            </div>
           </motion.div>
         </div>
       )}

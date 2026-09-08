@@ -29,12 +29,14 @@ import {
   Plus,
   QrCode,
   FileDown,
-  ShieldAlert
+  ShieldAlert,
+  Trash2
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Asset, User as UserType } from "../types";
 import { ImageViewerModal } from "../components/ImageViewerModal";
 import { EditAssetModal } from "../components/EditAssetModal";
+import { EditAssetTagModal } from "../components/EditAssetTagModal";
 import { AssetTagModal } from "../components/AssetTagModal";
 import { PhysicalAssetPlaque } from "../components/PhysicalAssetPlaque";
 import { generateAssetPdf } from "../utils/pdfGenerator";
@@ -51,7 +53,17 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
   setCurrentView,
   setSelectedAssetId
 }) => {
-  const { assets, users, runDiagnostics, checkoutAsset, checkinAsset, showToast } = useApp();
+  const { 
+    assets, 
+    users, 
+    currentUser, 
+    runDiagnostics, 
+    checkoutAsset, 
+    checkinAsset, 
+    deleteAsset, 
+    showToast 
+  } = useApp();
+  const isAdmin = currentUser?.isAdmin || currentUser?.id === "user-admin" || currentUser?.role?.toLowerCase().includes("admin");
   const [runningDiag, setRunningDiag] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -63,7 +75,9 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
   const [showCheckinModal, setShowCheckinModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
+  const [showEditTagModal, setShowEditTagModal] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const handleExportPdf = async () => {
@@ -302,13 +316,30 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
           </button>
 
           <button 
-            onClick={() => setShowEditModal(true)}
+            onClick={() => {
+              if (!isAdmin) {
+                showToast("Acesso Restrito", "Apenas administradores podem editar ativos.", "warning");
+                return;
+              }
+              setShowEditModal(true);
+            }}
             className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-2 shadow-xs"
-            title="Editar informações do ativo"
+            title={isAdmin ? "Editar informações do ativo" : "Apenas administradores podem editar"}
           >
             <Pencil className="w-4 h-4 text-blue-600" />
             <span>Editar Ativo</span>
           </button>
+
+          {isAdmin && (
+            <button 
+              onClick={() => setShowDeleteModal(true)}
+              className="px-3.5 py-2 bg-white border border-red-200 hover:bg-red-50 text-red-700 text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-1.5 shadow-xs"
+              title="Excluir este ativo permanentemente (Administrador)"
+            >
+              <Trash2 className="w-4 h-4 text-red-600" />
+              <span>Excluir Ativo</span>
+            </button>
+          )}
 
           {asset.status === "Disponível" ? (
             <button 
@@ -635,26 +666,39 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
                   <p className="text-[10px] text-slate-400">Identificação física com QR Code</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowTagModal(true)}
-                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                title="Imprimir ou baixar plaqueta com QR Code"
-              >
-                <Tag className="w-3.5 h-3.5" />
-                Imprimir
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowEditTagModal(true)}
+                  className="text-[11px] font-bold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-200 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Editar número da TAG ou dados da plaqueta física"
+                >
+                  <Pencil className="w-3.5 h-3.5 text-blue-600" />
+                  Editar TAG
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowTagModal(true)}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Imprimir ou baixar plaqueta com QR Code"
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  Imprimir
+                </button>
+              </div>
             </div>
 
             {/* Renderização Fiel da Plaqueta Física */}
             <div className="pt-1 flex justify-center">
               <PhysicalAssetPlaque
                 tagNumber={asset.id}
+                asset={asset}
                 assetName={asset.name}
                 companyName="isis"
                 subTitle="Transportes e Terminais"
                 size="md"
                 showActions={true}
+                onEdit={() => setShowEditTagModal(true)}
               />
             </div>
 
@@ -1085,6 +1129,84 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
           isOpen={showTagModal}
           onClose={() => setShowTagModal(false)}
           asset={asset}
+          onEditTag={() => setShowEditTagModal(true)}
+        />
+      )}
+
+      {/* Modal: Confirmar Exclusão de Ativo (Administrador) */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-200"
+          >
+            <div className="flex items-center gap-3 mb-4 text-red-600">
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-base">Confirmar Exclusão</h4>
+                <p className="text-xs text-slate-500 font-medium">Permissão: Administrador</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed mb-3">
+              Tem certeza de que deseja remover permanentemente este ativo do sistema?
+            </p>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 mb-4 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Nome:</span>
+                <span className="font-bold text-slate-800">{asset.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">TAG / Patrimônio:</span>
+                <span className="font-mono font-bold text-blue-600">{asset.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Número de Série:</span>
+                <span className="font-mono text-slate-700">{asset.seriesNumber}</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 mb-5">
+              <strong>Atenção:</strong> Esta ação removerá o registro do Firestore e cancelará todas as vinculações e histórico deste ativo.
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteAsset(asset.id);
+                  setShowDeleteModal(false);
+                  setCurrentView("assets");
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-sm shadow-red-500/20"
+              >
+                Sim, Excluir Ativo
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Modal de Edição da Plaqueta / TAG */}
+      {showEditTagModal && asset && (
+        <EditAssetTagModal
+          isOpen={showEditTagModal}
+          onClose={() => setShowEditTagModal(false)}
+          asset={asset}
+          onTagUpdated={(newTag) => {
+            setSelectedAssetId(newTag);
+          }}
         />
       )}
     </div>

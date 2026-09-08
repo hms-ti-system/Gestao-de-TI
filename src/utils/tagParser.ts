@@ -37,6 +37,21 @@ export function extractTagFromQrCode(decodedText: string): ParsedTagResult {
 
   let text = raw;
 
+  // 0. Tentar extrair diretamente se contiver padrão "PATRIMÔNIO / TAG: X" ou "TAG: X" ou "PATRIMONIO: X"
+  const tagLineMatch = text.match(/(?:PATRIM[OÔÓ]NIO(?:\s*[\/&]\s*TAG)?|TAG|ETIQUETA)\s*[:=-]\s*([A-Za-z0-9_-]+)/i);
+  if (tagLineMatch && tagLineMatch[1]) {
+    const candidate = tagLineMatch[1].trim();
+    if (candidate) {
+      const isNum = /^\d+$/.test(candidate);
+      return {
+        tag: candidate,
+        raw,
+        isNumeric: isNum,
+        numericValue: isNum ? parseInt(candidate, 10) : undefined,
+      };
+    }
+  }
+
   // 1. Tentar ler se for JSON (ex: {"id": "000937"})
   if ((text.startsWith("{") && text.endsWith("}")) || (text.startsWith("[") && text.endsWith("]"))) {
     try {
