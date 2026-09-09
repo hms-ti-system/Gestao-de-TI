@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { User, Asset, License, Consumable, Activity, TimelineEvent } from "../types";
+import { canUserLogin } from "../utils/permissions";
 import { 
   defaultUsers, 
   defaultAssets, 
@@ -108,7 +109,7 @@ interface AppContextType {
   supabaseSqlSchema: string;
   supabaseRecreateSqlSchema: string;
   recreateAllDatabases: () => Promise<{ success: boolean; message: string }>;
-  login: (identifier: string, password?: string) => boolean;
+  login: (identifier: string, password?: string) => { success: boolean; error?: string };
   logout: () => void;
   updateUserProfile: (userData: Partial<User>) => void;
   showToast: (title: string, message: string, type?: "success" | "info" | "warning") => void;
@@ -144,7 +145,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem("ac_user");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && canUserLogin(parsed)) {
+          return parsed;
+        }
       } catch {}
     }
     return defaultUsers.find(u => u.id === "user-admin") || defaultUsers[0];
@@ -514,20 +518,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   // Auth Operations
-  const login = (identifier: string, password?: string): boolean => {
-    const match = users.find((u) => 
-      u.email.toLowerCase() === identifier.toLowerCase() || 
-      (u.username && u.username.toLowerCase() === identifier.toLowerCase())
-    );
-    if (match) {
-      if (match.password && password && password !== "********" && match.password !== password) {
-        return false;
-      }
-      setCurrentUser(match);
-      showToast("Acesso Autorizado", `Bem-vindo de volta, ${match.name}!`, "success");
-      return true;
+  const login = (identifier: string, password?: string): { success: boolean; error?: string } => {
+    const trimmed = identifier.trim().toLowerCase();
+    if (!trimmed) {
+      return { success: false, error: "Informe o seu e-mail ou usuário de acesso." };
     }
-    return false;
+
+    const match = users.find((u) => 
+      u.email.toLowerCase() === trimmed || 
+      (u.username && u.username.toLowerCase() === trimmed)
+    );
+
+    if (!match) {
+      return { success: false, error: "Usuário ou e-mail não encontrado no sistema." };
+    }
+
+    // O perfil de Colaborador não precisa e não pode fazer login no sistema
+    if (!canUserLogin(match)) {
+      return { 
+        success: false, 
+        error: "O perfil de Colaborador não possui acesso ao painel do sistema. O cadastro de colaboradores é utilizado exclusivamente para registro e atribuição de ativos. Apenas Administradores e Operadores podem efetuar login." 
+      };
+    }
+
+    const expectedPassword = match.password || "admin";
+    if (password && password !== "********" && expectedPassword !== password) {
+      return { success: false, error: "Senha incorreta. Verifique suas credenciais e tente novamente." };
+    }
+
+    setCurrentUser(match);
+    showToast("Acesso Autorizado", `Bem-vindo de volta, ${match.name}!`, "success");
+    return { success: true };
   };
 
   const logout = () => {

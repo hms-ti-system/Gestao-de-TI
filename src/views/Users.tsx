@@ -17,6 +17,8 @@ import {
   Plus,
   Camera,
   Sliders,
+  Lock,
+  UserCheck,
   X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -42,6 +44,7 @@ export const Users: React.FC = () => {
   const [location, setLocation] = useState("");
   const [avatar, setAvatar] = useState("");
   const [privilege, setPrivilege] = useState<UserPrivilege>("user");
+  const [password, setPassword] = useState("");
 
   const presetAvatars = [
     "https://lh3.googleusercontent.com/aida-public/AB6AXuCaEVl7ZYpdPvU_yqwhu2nz1E1pHIwIvTaJu6jX5ZfguzaM5bBinsTchavTA-kNXVzg1XJkH0sEJ5wU0n6_4JUqmTf8ZlzvGZxbaWHxrdhvyauoGl3hHNtxJK6geTv6ETDpuWVJ751pdtMhOtY_Z6voV3XE9dSmeqJSipYMWwpGmj59HEPRzRz5nJd3OlEpRW0TbFBbBnp9MsQbJV2p2ifNg2_NER09Q2RODT5m4UcxkuhWTrvJe9LzbKFlHGQqKiDB0Y68Y3d_x7k",
@@ -90,6 +93,7 @@ export const Users: React.FC = () => {
   const handleOpenAddModal = () => {
     setName("");
     setEmail("");
+    setPassword("");
     setRole("");
     setDepartment("Operações & Logística");
     setLocation("Pátio 1");
@@ -105,17 +109,22 @@ export const Users: React.FC = () => {
       return;
     }
 
+    const isLoginUser = privilege === "admin" || privilege === "operator";
+
     addUser({
       name: name.trim(),
       email: email.trim(),
+      username: email.trim().split("@")[0].toLowerCase(),
       role: role.trim(),
       department,
       location: location.trim() || "Pátio 1",
       avatar: avatar || presetAvatars[0],
       isAdmin: privilege === "admin",
       privilege,
+      password: isLoginUser ? (password.trim() || "123456") : undefined,
     });
 
+    showToast("Colaborador Cadastrado", `${name.trim()} foi registrado com sucesso!`, "success");
     setShowAddModal(false);
   };
 
@@ -123,6 +132,7 @@ export const Users: React.FC = () => {
     setUserIdToEdit(user.id);
     setName(user.name);
     setEmail(user.email);
+    setPassword(user.password || "");
     setRole(user.role);
     setDepartment(user.department);
     setLocation(user.location || "Pátio 1");
@@ -148,17 +158,23 @@ export const Users: React.FC = () => {
       return;
     }
 
+    const isLoginUser = privilege === "admin" || privilege === "operator";
+    const existingUser = users.find(u => u.id === userIdToEdit);
+
     updateUser(userIdToEdit, {
       name: name.trim(),
       email: email.trim(),
+      username: email.trim().split("@")[0].toLowerCase(),
       role: role.trim(),
       department,
       location: location.trim() || "Pátio 1",
       avatar,
       isAdmin: privilege === "admin",
       privilege,
+      password: isLoginUser ? (password.trim() || existingUser?.password || "123456") : undefined,
     });
 
+    showToast("Dados Atualizados", `Cadastro de ${name.trim()} atualizado com sucesso!`, "success");
     setShowEditModal(false);
   };
 
@@ -439,6 +455,7 @@ export const Users: React.FC = () => {
                           <>
                             <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
                             <span>Colaborador</span>
+                            <span className="text-[9px] font-semibold text-slate-400 normal-case ml-0.5">(Sem login)</span>
                           </>
                         )}
                       </button>
@@ -649,7 +666,7 @@ export const Users: React.FC = () => {
                         <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Operar</span>
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Permissões básicas: registrar, consultar e movimentar ativos e consumíveis.
+                        Permissões operacionais: registrar, consultar e movimentar ativos e consumíveis.
                       </p>
                     </div>
                   </div>
@@ -669,14 +686,49 @@ export const Users: React.FC = () => {
                           <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
                           <span>Colaborador</span>
                         </div>
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Consulta</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Sem Login</span>
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Acesso padrão: visualizar inventário e ativos sob sua custódia.
+                        Sem login no sistema: cadastro exclusivo para custódia e atribuição de ativos.
                       </p>
                     </div>
                   </div>
                 </div>
+
+                {/* Info or Password according to selected privilege */}
+                {privilege === "user" ? (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-start gap-2.5">
+                    <UserCheck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider mb-0.5">Perfil de Custódia (Sem Login)</span>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Colaboradores não realizam login no sistema e não necessitam de senha. O cadastro servirá exclusivamente para controle de inventário e atribuição de ativos sob sua responsabilidade.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-700 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Senha de Acesso ao Sistema</span>
+                      </label>
+                      <span className="text-[10px] font-semibold text-blue-600 bg-blue-100/60 px-2 py-0.5 rounded">
+                        {privilege === "admin" ? "Administrador" : "Operador"}
+                      </span>
+                    </div>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Defina a senha de acesso (padrão: 123456)"
+                      className="w-full bg-white border border-blue-200 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 rounded-lg px-3 py-2 text-xs text-slate-800 outline-none"
+                    />
+                    <p className="text-[10px] text-slate-500">
+                      O usuário poderá acessar utilizando o e-mail ou o usuário <strong className="text-slate-700">{email ? email.split("@")[0].toLowerCase() : "exemplo"}</strong> e esta senha.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
@@ -874,7 +926,7 @@ export const Users: React.FC = () => {
                         <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Operar</span>
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Permissões básicas: registrar, consultar e movimentar ativos e consumíveis.
+                        Permissões operacionais: registrar, consultar e movimentar ativos e consumíveis.
                       </p>
                     </div>
                   </div>
@@ -894,14 +946,49 @@ export const Users: React.FC = () => {
                           <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
                           <span>Colaborador</span>
                         </div>
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Consulta</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Sem Login</span>
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Acesso padrão: visualizar inventário e ativos sob sua custódia.
+                        Sem login no sistema: cadastro exclusivo para custódia e atribuição de ativos.
                       </p>
                     </div>
                   </div>
                 </div>
+
+                {/* Info or Password according to selected privilege */}
+                {privilege === "user" ? (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-start gap-2.5">
+                    <UserCheck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider mb-0.5">Perfil de Custódia (Sem Login)</span>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Colaboradores não realizam login no sistema e não necessitam de senha. O cadastro servirá exclusivamente para controle de inventário e atribuição de ativos sob sua responsabilidade.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-indigo-50/60 border border-indigo-200/80 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-700 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Senha de Acesso ao Sistema</span>
+                      </label>
+                      <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-100/60 px-2 py-0.5 rounded">
+                        {privilege === "admin" ? "Administrador" : "Operador"}
+                      </span>
+                    </div>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Defina ou altere a senha de acesso"
+                      className="w-full bg-white border border-indigo-200 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 rounded-lg px-3 py-2 text-xs text-slate-800 outline-none"
+                    />
+                    <p className="text-[10px] text-slate-500">
+                      O usuário poderá acessar utilizando o e-mail ou o usuário <strong className="text-slate-700">{email ? email.split("@")[0].toLowerCase() : "exemplo"}</strong> e esta senha.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">

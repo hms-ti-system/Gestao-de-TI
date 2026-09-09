@@ -43,6 +43,18 @@ export function isUserOperator(user?: User | null): boolean {
 }
 
 /**
+ * Checks if a user profile is allowed to log into the system.
+ * Colaborador (privilege === "user") does NOT log into the system; they serve only
+ * for registration and asset allocation/custody.
+ * Only Administrator and Operator profiles are granted system login.
+ */
+export function canUserLogin(user?: User | null): boolean {
+  if (!user) return false;
+  const privilege = getUserPrivilege(user);
+  return privilege === "admin" || privilege === "operator";
+}
+
+/**
  * Checks if user has permission to operate the system
  * (register/create or consult assets and consumables, perform check-in/check-out)
  */
