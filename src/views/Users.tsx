@@ -95,9 +95,9 @@ export const Users: React.FC = () => {
     setEmail("");
     setPassword("");
     setRole("");
-    setDepartment("Operações & Logística");
-    setLocation("Pátio 1");
-    setAvatar(presetAvatars[0]);
+    setDepartment("");
+    setLocation("");
+    setAvatar("");
     setPrivilege("user");
     setShowAddModal(true);
   };
@@ -116,9 +116,9 @@ export const Users: React.FC = () => {
       email: email.trim(),
       username: email.trim().split("@")[0].toLowerCase(),
       role: role.trim(),
-      department,
+      department: department.trim() || "Geral",
       location: location.trim() || "Pátio 1",
-      avatar: avatar || presetAvatars[0],
+      avatar: avatar.trim(),
       isAdmin: privilege === "admin",
       privilege,
       password: isLoginUser ? (password.trim() || "123456") : undefined,
@@ -383,12 +383,18 @@ export const Users: React.FC = () => {
                     {/* User profile capsule */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <img 
-                          src={user.avatar} 
-                          alt={user.name} 
-                          className="w-10 h-10 rounded-full object-cover border border-slate-100 shadow-sm"
-                          referrerPolicy="no-referrer"
-                        />
+                        {user.avatar ? (
+                          <img 
+                            src={user.avatar} 
+                            alt={user.name} 
+                            className="w-10 h-10 rounded-full object-cover border border-slate-100 shadow-sm shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
+                            {user.name ? user.name.split(" ").filter(Boolean).map(n => n[0]).slice(0, 2).join("").toUpperCase() : <UsersIcon className="w-5 h-5 text-slate-400" />}
+                          </div>
+                        )}
                         <div className="flex flex-col">
                           <span className="text-xs font-bold text-slate-800 leading-snug">{user.name}</span>
                           <span className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
@@ -490,45 +496,57 @@ export const Users: React.FC = () => {
 
       {/* ADD NEW USER REGISTER MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-100"
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl max-w-xl w-full my-auto shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
           >
-            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
-              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                <UserPlus className="w-6 h-6" />
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 text-blue-600 rounded-xl">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm sm:text-base">Cadastrar Novo Colaborador</h4>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mt-0.5">Gestão de Equipe & Controle</p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold text-slate-900">Cadastrar Novo Colaborador</h4>
-                <p className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Gestão de Equipe & Controle</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-slate-500 uppercase tracking-wide">Nome Completo</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Sarah Connor"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
-                />
-              </div>
+            <form onSubmit={handleCreateUser} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Nome Completo</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Sarah Connor"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
+                  />
+                </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-slate-500 uppercase tracking-wide">E-mail Corporativo</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="Ex: s.connor@empresa.co"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
-                />
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">E-mail Corporativo</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="Ex: s.connor@empresa.co"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -539,11 +557,11 @@ export const Users: React.FC = () => {
                   placeholder="Ex: Analista de Segurança Sênior"
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-500 uppercase tracking-wide">Departamento</label>
                   <input
@@ -553,7 +571,7 @@ export const Users: React.FC = () => {
                     placeholder="Ex: Recursos Humanos"
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                   />
                   <datalist id="add-departments">
                     {uniqueDepartments.map(dept => (
@@ -615,8 +633,8 @@ export const Users: React.FC = () => {
                 value={avatar}
                 onChange={setAvatar}
                 presets={presetAvatars}
-                label="Foto de Perfil / Avatar"
-                sublabel="Selecione um arquivo do dispositivo, informe um link ou escolha um preset"
+                label="Foto de Perfil (Opcional)"
+                sublabel="Opcional: deixe sem foto, faça upload ou selecione um preset"
               />
 
               {/* Atribuição de Privilégios & Nível de Acesso */}
@@ -660,7 +678,7 @@ export const Users: React.FC = () => {
                     <div>
                       <div className="flex items-center justify-between gap-1 mb-1">
                         <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
-                          <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                          <Shield className="w-3.5 h-3.5 text-blue-600" />
                           <span>Operador</span>
                         </div>
                         <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Operar</span>
@@ -686,28 +704,18 @@ export const Users: React.FC = () => {
                           <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
                           <span>Colaborador</span>
                         </div>
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Sem Login</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Padrão</span>
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Sem login no sistema: cadastro exclusivo para custódia e atribuição de ativos.
+                        Colaborador para custódia e atribuição de ativos da empresa.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Info or Password according to selected privilege */}
-                {privilege === "user" ? (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-start gap-2.5">
-                    <UserCheck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider mb-0.5">Perfil de Custódia (Sem Login)</span>
-                      <p className="text-[11px] text-slate-500 leading-relaxed">
-                        Colaboradores não realizam login no sistema e não necessitam de senha. O cadastro servirá exclusivamente para controle de inventário e atribuição de ativos sob sua responsabilidade.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-2">
+                {/* Password only if privilege is admin or operator - custody banner completely removed */}
+                {privilege !== "user" && (
+                  <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-2 mt-2">
                     <div className="flex items-center justify-between">
                       <label className="font-bold text-slate-700 text-xs uppercase tracking-wider flex items-center gap-1.5">
                         <Lock className="w-3.5 h-3.5 text-blue-600" />
@@ -731,17 +739,17 @@ export const Users: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 font-bold text-slate-400 hover:text-slate-800 transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 font-semibold transition-colors text-center cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm"
+                  className="w-full sm:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm text-center cursor-pointer"
                 >
                   Confirmar Cadastro
                 </button>
@@ -753,43 +761,55 @@ export const Users: React.FC = () => {
 
       {/* EDIT USER REGISTER MODAL */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-100"
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl max-w-xl w-full my-auto shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
           >
-            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
-              <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                <Edit className="w-6 h-6" />
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
+                  <Edit className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm sm:text-base">Editar Detalhes de Colaborador</h4>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mt-0.5">Sincronização de Credenciais</p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold text-slate-900">Editar Detalhes de Colaborador</h4>
-                <p className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Sincronização de Credenciais</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleUpdateUser} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-slate-500 uppercase tracking-wide">Nome Completo</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600"
-                />
-              </div>
+            <form onSubmit={handleUpdateUser} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Nome Completo</label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600 text-xs"
+                  />
+                </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-slate-500 uppercase tracking-wide">E-mail Corporativo</label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600"
-                />
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">E-mail Corporativo</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600 text-xs"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -799,11 +819,11 @@ export const Users: React.FC = () => {
                   required
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600 text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-500 uppercase tracking-wide">Departamento</label>
                   <input
@@ -813,7 +833,7 @@ export const Users: React.FC = () => {
                     placeholder="Ex: Recursos Humanos"
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-indigo-600 text-xs"
                   />
                   <datalist id="edit-departments">
                     {uniqueDepartments.map(dept => (
@@ -875,8 +895,8 @@ export const Users: React.FC = () => {
                 value={avatar}
                 onChange={setAvatar}
                 presets={presetAvatars}
-                label="Foto de Perfil / Avatar"
-                sublabel="Carregue uma foto do computador, cole um link ou selecione um preset"
+                label="Foto de Perfil (Opcional)"
+                sublabel="Opcional: deixe sem foto, faça upload ou selecione um preset"
               />
 
               {/* Atribuição de Privilégios & Nível de Acesso */}
@@ -946,28 +966,18 @@ export const Users: React.FC = () => {
                           <UsersIcon className="w-3.5 h-3.5 text-slate-400" />
                           <span>Colaborador</span>
                         </div>
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Sem Login</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded">Padrão</span>
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Sem login no sistema: cadastro exclusivo para custódia e atribuição de ativos.
+                        Colaborador para custódia e atribuição de ativos da empresa.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Info or Password according to selected privilege */}
-                {privilege === "user" ? (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-start gap-2.5">
-                    <UserCheck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider mb-0.5">Perfil de Custódia (Sem Login)</span>
-                      <p className="text-[11px] text-slate-500 leading-relaxed">
-                        Colaboradores não realizam login no sistema e não necessitam de senha. O cadastro servirá exclusivamente para controle de inventário e atribuição de ativos sob sua responsabilidade.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-indigo-50/60 border border-indigo-200/80 rounded-xl space-y-2">
+                {/* Password only if privilege is admin or operator - custody banner completely removed */}
+                {privilege !== "user" && (
+                  <div className="p-3 bg-indigo-50/60 border border-indigo-200/80 rounded-xl space-y-2 mt-2">
                     <div className="flex items-center justify-between">
                       <label className="font-bold text-slate-700 text-xs uppercase tracking-wider flex items-center gap-1.5">
                         <Lock className="w-3.5 h-3.5 text-indigo-600" />
@@ -991,17 +1001,17 @@ export const Users: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2 font-bold text-slate-400 hover:text-slate-800 transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 font-semibold transition-colors text-center cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-sm"
+                  className="w-full sm:w-auto px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-sm text-center cursor-pointer"
                 >
                   Salvar Detalhes
                 </button>
@@ -1030,12 +1040,18 @@ export const Users: React.FC = () => {
             </div>
 
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4 flex items-center gap-3">
-              <img 
-                src={userToDelete.avatar} 
-                alt={userToDelete.name} 
-                className="w-12 h-12 rounded-full object-cover border border-slate-200 shrink-0"
-                referrerPolicy="no-referrer"
-              />
+              {userToDelete.avatar ? (
+                <img 
+                  src={userToDelete.avatar} 
+                  alt={userToDelete.name} 
+                  className="w-12 h-12 rounded-full object-cover border border-slate-200 shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 text-slate-600 font-bold text-sm flex items-center justify-center shrink-0">
+                  {userToDelete.name ? userToDelete.name.split(" ").filter(Boolean).map(n => n[0]).slice(0, 2).join("").toUpperCase() : <UsersIcon className="w-6 h-6 text-slate-400" />}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold text-slate-800 truncate">{userToDelete.name}</p>
                 <p className="text-xs text-slate-500 truncate">{userToDelete.email}</p>

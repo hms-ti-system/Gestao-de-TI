@@ -188,14 +188,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [consumables, setConsumables] = useState<Consumable[]>(() => {
+    const hasCleared = localStorage.getItem("ac_consumables_cleared_zero_v3");
+    if (!hasCleared) {
+      localStorage.setItem("ac_consumables", "[]");
+      localStorage.setItem("ac_consumables_cleared_zero_v3", "true");
+      return [];
+    }
     const saved = localStorage.getItem("ac_consumables");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch {}
     }
-    return defaultConsumables;
+    return [];
   });
 
   const [activities, setActivities] = useState<Activity[]>(() => {
@@ -350,13 +356,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         defaultUsers,
         assetsRef.current.length > 0 ? assetsRef.current : defaultAssets,
         licensesRef.current.length > 0 ? licensesRef.current : defaultLicenses,
-        consumablesRef.current.length > 0 ? consumablesRef.current : defaultConsumables,
+        consumablesRef.current,
         activitiesRef.current.length > 0 ? activitiesRef.current : defaultActivities
       );
       if (data.users && data.users.length > 0) setUsers(data.users);
       if (data.assets && data.assets.length > 0) setAssets(data.assets);
       if (data.licenses && data.licenses.length > 0) setLicenses(data.licenses);
-      if (data.consumables && data.consumables.length > 0) setConsumables(data.consumables);
+      setConsumables(data.consumables || []);
       if (data.activities && data.activities.length > 0) setActivities(data.activities);
 
       setCloudInfo(prev => ({
@@ -425,12 +431,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const initDbSync = async () => {
       try {
+        const wipedCloud = localStorage.getItem("ac_consumables_cleared_zero_v3");
+        if (!wipedCloud) {
+          localStorage.setItem("ac_consumables_cleared_zero_v3", "true");
+          localStorage.setItem("ac_consumables", "[]");
+          try {
+            await clearSpecificCollections(["consumables"]);
+            await clearSupabaseTables(["consumables"]);
+          } catch (e) {
+            console.warn("Could not wipe cloud consumables:", e);
+          }
+        }
+
         setCloudInfo(prev => ({ ...prev, status: "syncing" }));
         const fData = await loadDatabaseFromFirestore(
           defaultUsers,
           assetsRef.current.length > 0 ? assetsRef.current : defaultAssets,
           licensesRef.current.length > 0 ? licensesRef.current : defaultLicenses,
-          consumablesRef.current.length > 0 ? consumablesRef.current : defaultConsumables,
+          [],
           activitiesRef.current.length > 0 ? activitiesRef.current : defaultActivities
         );
         if (!isMounted) return;
@@ -438,7 +456,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (fData.users && fData.users.length > 0) setUsers(fData.users);
         if (fData.assets && fData.assets.length > 0) setAssets(fData.assets);
         if (fData.licenses && fData.licenses.length > 0) setLicenses(fData.licenses);
-        if (fData.consumables && fData.consumables.length > 0) setConsumables(fData.consumables);
+        setConsumables(fData.consumables || []);
         if (fData.activities && fData.activities.length > 0) setActivities(fData.activities);
 
         setCloudInfo(prev => ({
@@ -689,7 +707,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             id: Date.now().toString(),
             title: `Atribuído a ${userObj.name}`,
             date: new Date(date).toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" }),
-            description: `Checkout efetuado para o local: ${location}. Notas: ${notes || "Nenhuma"}`,
+            description: location
+              ? `Checkout efetuado para o local: ${location}. Notas: ${notes || "Nenhuma"}`
+              : `Checkout efetuado. Notas: ${notes || "Nenhuma"}`,
             type: "success",
             user: currentUser?.name || "Admin",
           };
@@ -714,7 +734,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       user: currentUser?.name || "Admin",
       action: "Check-out",
       target: assetId,
-      details: notes || `Checkout para ${location}`,
+      details: notes || (location ? `Checkout para ${location}` : "Saída realizada"),
       time: "Agora mesmo",
       type: "sistema",
       category: "Notebooks",

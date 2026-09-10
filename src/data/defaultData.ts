@@ -358,48 +358,7 @@ export const defaultLicenses: License[] = [
   },
 ];
 
-export const defaultConsumables: Consumable[] = [
-  {
-    id: "C-1",
-    name: "Cabo USB-C Thunderbolt 4 (1.8m)",
-    category: "Cabos & Adaptadores",
-    description: "Cabo de alta velocidade 40Gbps com Power Delivery 100W e suporte a 8K.",
-    quantityRemaining: 4,
-    quantityTotal: 25,
-    status: "Crítico",
-    iconName: "settings_input_hdmi",
-  },
-  {
-    id: "C-2",
-    name: "Kit Teclado e Mouse Sem Fio Dell Pro KM5221W",
-    category: "Periféricos",
-    description: "Conjunto sem fio ABNT2 com pilha de longa duração (até 36 meses).",
-    quantityRemaining: 12,
-    quantityTotal: 30,
-    status: "Estoque Médio",
-    iconName: "keyboard",
-  },
-  {
-    id: "C-3",
-    name: "Toner HP LaserJet Enterprise W1470A Preto",
-    category: "Impressão",
-    description: "Cartucho original de alto rendimento para impressoras departamentais M611.",
-    quantityRemaining: 2,
-    quantityTotal: 10,
-    status: "Estoque Baixo",
-    iconName: "print",
-  },
-  {
-    id: "C-4",
-    name: "Carregador USB-C 65W GaN Universal",
-    category: "Energia & Carregadores",
-    description: "Adaptador ultracompacto bivolt automático para notebooks Dell, Lenovo e Mac.",
-    quantityRemaining: 18,
-    quantityTotal: 20,
-    status: "Disponível",
-    iconName: "power",
-  },
-];
+export const defaultConsumables: Consumable[] = [];
 
 export const defaultActivities: Activity[] = [
   {

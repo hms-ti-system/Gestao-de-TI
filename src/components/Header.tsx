@@ -256,11 +256,17 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setCurrentView("profile")}
               className="flex items-center gap-2 hover:bg-slate-50 p-1.5 rounded-lg transition-all cursor-pointer"
             >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="h-9 w-9 rounded-full object-cover border border-slate-300"
-              />
+              {currentUser.avatar ? (
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className="h-9 w-9 rounded-full object-cover border border-slate-300 shrink-0"
+                />
+              ) : (
+                <div className="h-9 w-9 rounded-full bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
+                  {currentUser.name ? currentUser.name.split(" ").filter(Boolean).map(n => n[0]).slice(0, 2).join("").toUpperCase() : "U"}
+                </div>
+              )}
               <div className="text-left hidden sm:block leading-none">
                 <p className="text-xs font-semibold text-slate-800">{currentUser.name}</p>
                 <p className="text-[10px] text-slate-400 mt-0.5">{currentUser.role}</p>

@@ -269,7 +269,7 @@ export const Assets: React.FC<AssetsProps> = ({
 
   // Checkout Form State
   const [checkoutUser, setCheckoutUser] = useState(users.filter(u => u.id !== "user-admin")[0]?.id || users[0]?.id || "");
-  const [checkoutLocation, setCheckoutLocation] = useState("Sede Principal (HQ)");
+  const [checkoutLocation, setCheckoutLocation] = useState("");
   const [checkoutNotes, setCheckoutNotes] = useState("");
 
   // Checkin Form State
@@ -347,6 +347,8 @@ export const Assets: React.FC<AssetsProps> = ({
 
   const triggerCheckout = (assetId: string) => {
     setActiveAssetId(assetId);
+    setCheckoutLocation("");
+    setCheckoutNotes("");
     setShowCheckoutModal(true);
   };
 
@@ -364,12 +366,13 @@ export const Assets: React.FC<AssetsProps> = ({
     checkoutAsset(
       activeAssetId,
       checkoutUser,
-      checkoutLocation,
+      checkoutLocation.trim(),
       new Date().toISOString().split('T')[0],
       "",
       checkoutNotes
     );
     setShowCheckoutModal(false);
+    setCheckoutLocation("");
     setCheckoutNotes("");
   };
 
@@ -842,11 +845,17 @@ export const Assets: React.FC<AssetsProps> = ({
                     >
                       {asset.assignedToUser ? (
                         <div className="flex items-center gap-2">
-                          <img
-                            src={asset.assignedToUser.avatar}
-                            alt=""
-                            className="w-5 h-5 rounded-full object-cover border border-slate-200"
-                          />
+                          {asset.assignedToUser.avatar ? (
+                            <img
+                              src={asset.assignedToUser.avatar}
+                              alt=""
+                              className="w-5 h-5 rounded-full object-cover border border-slate-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[9px] flex items-center justify-center shrink-0">
+                              {asset.assignedToUser.name ? asset.assignedToUser.name[0].toUpperCase() : "U"}
+                            </div>
+                          )}
                           <span className="text-xs text-slate-700 font-semibold">{asset.assignedToUser.name}</span>
                         </div>
                       ) : (
@@ -1436,7 +1445,6 @@ export const Assets: React.FC<AssetsProps> = ({
                 <input
                   type="text"
                   list="checkout-locations-list"
-                  required
                   placeholder="ex: Sede Principal (HQ), Sala 204, Remoto..."
                   value={checkoutLocation}
                   onChange={(e) => setCheckoutLocation(e.target.value)}

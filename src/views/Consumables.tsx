@@ -205,6 +205,29 @@ export const Consumables: React.FC = () => {
         </div>
       </div>
 
+      {/* Empty state alert when zero consumables */}
+      {consumables.length === 0 && (
+        <div className="p-8 bg-white border border-slate-200 rounded-2xl text-center space-y-3 shadow-xs">
+          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto">
+            <Boxes className="w-6 h-6" />
+          </div>
+          <div>
+            <h4 className="font-bold text-slate-800 text-base">Nenhum consumível cadastrado</h4>
+            <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+              Todos os consumíveis foram excluídos com sucesso. Você pode cadastrar novos itens do zero clicando no botão abaixo ou no card pontilhado.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenAddModal}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Cadastrar Primeiro Consumível</span>
+          </button>
+        </div>
+      )}
+
       {/* Grid of Consumables */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {consumables.map((item) => {
@@ -330,23 +353,23 @@ export const Consumables: React.FC = () => {
 
       {/* REGISTRATION MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-100"
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl max-w-md w-full my-auto p-5 sm:p-6 shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
           >
-            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
-              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                <Boxes className="w-6 h-6" />
+            <div className="flex items-center gap-3 mb-5 border-b border-slate-100 pb-3">
+              <div className="p-2 bg-blue-100 text-blue-600 rounded-xl">
+                <Boxes className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900">Cadastrar Consumível</h4>
+                <h4 className="font-bold text-slate-900 text-sm sm:text-base">Cadastrar Consumível</h4>
                 <p className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Gestão de Peças e Suprimentos</p>
               </div>
             </div>
 
-            <form onSubmit={handleCreateConsumable} className="space-y-4 text-xs">
+            <form onSubmit={handleCreateConsumable} className="flex-1 overflow-y-auto space-y-4 text-xs pr-1">
               <div className="space-y-1">
                 <label className="font-bold text-slate-500 uppercase tracking-wide">Nome do Item</label>
                 <input
@@ -355,17 +378,17 @@ export const Consumables: React.FC = () => {
                   placeholder="ex: Mouse Sem Fio Logitech"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-500 uppercase tracking-wide">Categoria</label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs bg-white"
                   >
                     <option value="Impressoras">Impressoras</option>
                     <option value="Cabos">Cabos & Conexões</option>
@@ -379,7 +402,7 @@ export const Consumables: React.FC = () => {
                   <select
                     value={iconName}
                     onChange={(e) => setIconName(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs bg-white"
                   >
                     <option value="keyboard">Teclado</option>
                     <option value="mouse">Mouse</option>
@@ -398,11 +421,11 @@ export const Consumables: React.FC = () => {
                   placeholder="ex: Conexão USB-C, comprimento 1.8 metros."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-500 uppercase tracking-wide">Quantidade Restante</label>
                   <input
@@ -411,7 +434,7 @@ export const Consumables: React.FC = () => {
                     min={0}
                     value={qtyRemaining}
                     onChange={(e) => setQtyRemaining(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                   />
                 </div>
 
@@ -423,22 +446,22 @@ export const Consumables: React.FC = () => {
                     min={1}
                     value={qtyTotal}
                     onChange={(e) => setQtyTotal(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 font-bold text-slate-400 hover:text-slate-800 transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 font-semibold transition-colors text-center cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm cursor-pointer text-center"
                 >
                   Adicionar ao Estoque
                 </button>
@@ -450,23 +473,23 @@ export const Consumables: React.FC = () => {
 
       {/* EDIT CONSUMABLE MODAL (Administrador) */}
       {editingConsumable && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-100"
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl max-w-md w-full my-auto p-5 sm:p-6 shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden"
           >
-            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
-              <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                <Pencil className="w-6 h-6" />
+            <div className="flex items-center gap-3 mb-5 border-b border-slate-100 pb-3">
+              <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
+                <Pencil className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900">Editar Consumível</h4>
+                <h4 className="font-bold text-slate-900 text-sm sm:text-base">Editar Consumível</h4>
                 <p className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Permissão de Administrador</p>
               </div>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveEdit} className="flex-1 overflow-y-auto space-y-4 text-xs pr-1">
               <div className="space-y-1">
                 <label className="font-bold text-slate-500 uppercase tracking-wide">Nome do Item</label>
                 <input
@@ -474,17 +497,17 @@ export const Consumables: React.FC = () => {
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-500 uppercase tracking-wide">Categoria</label>
                   <select
                     value={editCategory}
                     onChange={(e) => setEditCategory(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs bg-white"
                   >
                     <option value="Impressoras">Impressoras</option>
                     <option value="Cabos">Cabos & Conexões</option>
@@ -498,7 +521,7 @@ export const Consumables: React.FC = () => {
                   <select
                     value={editIconName}
                     onChange={(e) => setEditIconName(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs bg-white"
                   >
                     <option value="keyboard">Teclado</option>
                     <option value="mouse">Mouse</option>
@@ -516,11 +539,11 @@ export const Consumables: React.FC = () => {
                   required
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-500 uppercase tracking-wide">Quantidade Restante</label>
                   <input
@@ -529,7 +552,7 @@ export const Consumables: React.FC = () => {
                     min={0}
                     value={editQtyRemaining}
                     onChange={(e) => setEditQtyRemaining(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                   />
                 </div>
 
@@ -541,22 +564,22 @@ export const Consumables: React.FC = () => {
                     min={1}
                     value={editQtyTotal}
                     onChange={(e) => setEditQtyTotal(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-800 outline-none focus:border-blue-600 text-xs"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setEditingConsumable(null)}
-                  className="px-4 py-2 font-bold text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 font-semibold transition-colors cursor-pointer text-center"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-sm cursor-pointer text-center"
                 >
                   Salvar Alterações
                 </button>

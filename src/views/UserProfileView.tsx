@@ -142,11 +142,17 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ setCurrentView
             onChange={handleHeaderPhotoChange}
             className="hidden"
           />
-          <img
-            src={currentUser.avatar}
-            alt={currentUser.name}
-            className="w-24 h-24 rounded-full object-cover border-2 border-slate-200 shadow-inner group-hover:border-blue-500 transition-colors"
-          />
+          {currentUser.avatar ? (
+            <img
+              src={currentUser.avatar}
+              alt={currentUser.name}
+              className="w-24 h-24 rounded-full object-cover border-2 border-slate-200 shadow-inner group-hover:border-blue-500 transition-colors"
+            />
+          ) : (
+            <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-slate-200 text-slate-600 font-bold text-2xl flex items-center justify-center shadow-inner group-hover:border-blue-500 transition-colors">
+              {currentUser.name ? currentUser.name.split(" ").filter(Boolean).map(n => n[0]).slice(0, 2).join("").toUpperCase() : "U"}
+            </div>
+          )}
           <div className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
             <Camera className="w-6 h-6 text-white mb-0.5" />
             <span className="text-[9px] text-white font-bold">Alterar Foto</span>
@@ -379,8 +385,8 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({ setCurrentView
                     value={avatar}
                     onChange={setAvatar}
                     presets={presetAvatars}
-                    label="Foto de Perfil / Avatar"
-                    sublabel="Envie do dispositivo, informe um link de imagem ou escolha um preset"
+                    label="Foto de Perfil (Opcional)"
+                    sublabel="Opcional: deixe sem foto, faça upload ou selecione um preset"
                   />
                 </div>
 

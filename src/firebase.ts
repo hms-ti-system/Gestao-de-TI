@@ -257,18 +257,8 @@ export async function loadDatabaseFromFirestore(
       licensesList = toSeed;
     }
 
-    // 4. Fetch Consumables
-    let consumablesList = await getCollectionData<any>("consumables");
-    if (consumablesList.length === 0) {
-      const toSeed = (fallbackConsumables && fallbackConsumables.length > 0) ? fallbackConsumables : defaultConsumables;
-      console.log(`Consumables collection is empty in Firestore. Seeding ${toSeed.length} consumables...`);
-      const conBatch = writeBatch(db);
-      toSeed.forEach((c) => {
-        conBatch.set(doc(db, "consumables", c.id), sanitizeForFirestore(c));
-      });
-      await conBatch.commit();
-      consumablesList = toSeed;
-    }
+    // 4. Fetch Consumables (kept clean and empty for user registration from scratch)
+    const consumablesList = await getCollectionData<any>("consumables");
 
     // 5. Fetch Activities
     let activitiesList = await getCollectionData<any>("activities");

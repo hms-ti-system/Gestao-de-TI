@@ -96,7 +96,7 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
 
   // Forms states
   const [checkoutUser, setCheckoutUser] = useState(users.filter(u => u.id !== "user-admin")[0]?.id || users[0]?.id || "");
-  const [checkoutLocation, setCheckoutLocation] = useState("Sede Principal (HQ)");
+  const [checkoutLocation, setCheckoutLocation] = useState("");
   const [checkoutNotes, setCheckoutNotes] = useState("");
   const [checkinStatus, setCheckinStatus] = useState<Asset["status"]>("Disponível");
   const [checkinCondition, setCheckinCondition] = useState("good");
@@ -212,12 +212,13 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
     checkoutAsset(
       asset.id,
       checkoutUser,
-      checkoutLocation,
+      checkoutLocation.trim(),
       new Date().toISOString().split('T')[0],
       "",
       checkoutNotes
     );
     setShowCheckoutModal(false);
+    setCheckoutLocation("");
     setCheckoutNotes("");
   };
 
@@ -343,7 +344,11 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
 
           {asset.status === "Disponível" ? (
             <button 
-              onClick={() => setShowCheckoutModal(true)}
+              onClick={() => {
+                setCheckoutLocation("");
+                setCheckoutNotes("");
+                setShowCheckoutModal(true);
+              }}
               className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all uppercase tracking-wide flex items-center gap-2 shadow-sm"
             >
               <UserCheck className="w-4 h-4" />
@@ -773,11 +778,17 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
             {asset.assignedToUser ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <img
-                    src={asset.assignedToUser.avatar}
-                    alt=""
-                    className="w-12 h-12 rounded-full object-cover border border-slate-200"
-                  />
+                  {asset.assignedToUser.avatar ? (
+                    <img
+                      src={asset.assignedToUser.avatar}
+                      alt={asset.assignedToUser.name}
+                      className="w-12 h-12 rounded-full object-cover border border-slate-200 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center shrink-0">
+                      {asset.assignedToUser.name ? asset.assignedToUser.name.split(" ").filter(Boolean).map(n => n[0]).slice(0, 2).join("").toUpperCase() : "U"}
+                    </div>
+                  )}
                   <div>
                     <h4 className="text-sm font-bold text-slate-800 leading-none">{asset.assignedToUser.name}</h4>
                     <p className="text-[10px] text-slate-400 font-semibold mt-1.5 uppercase tracking-wide">{asset.assignedToUser.role}</p>
@@ -972,7 +983,6 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
                 <input
                   type="text"
                   list="checkout-locations-list"
-                  required
                   placeholder="ex: Sede Principal (HQ), Sala 204, Remoto..."
                   value={checkoutLocation}
                   onChange={(e) => setCheckoutLocation(e.target.value)}

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { Upload, Link as LinkIcon, Image as ImageIcon, Check, X, Camera, RefreshCw } from "lucide-react";
+import { Upload, Link as LinkIcon, Image as ImageIcon, Check, X, Camera, RefreshCw, User, UserX } from "lucide-react";
 
 interface AvatarUploaderProps {
   value: string;
@@ -13,8 +13,8 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
   value,
   onChange,
   presets = [],
-  label = "Foto de Perfil / Avatar",
-  sublabel = "Escolha um arquivo do dispositivo, informe um link ou escolha um preset",
+  label = "Foto de Perfil (Opcional)",
+  sublabel = "Opcional: você pode deixar sem foto, enviar uma imagem ou escolher um preset",
 }) => {
   const [tab, setTab] = useState<"upload" | "url" | "presets">("upload");
   const [isDragging, setIsDragging] = useState(false);
@@ -103,28 +103,61 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
     }
   };
 
+  const handleRemovePhoto = () => {
+    onChange("");
+    setUrlInput("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="space-y-3 bg-slate-50/70 border border-slate-200 rounded-xl p-3.5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <label className="font-bold text-slate-700 text-xs uppercase tracking-wide block">
-            {label}
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="font-bold text-slate-700 text-xs uppercase tracking-wide block">
+              {label}
+            </label>
+            <span className="text-[10px] font-semibold text-slate-400 bg-slate-200/70 px-1.5 py-0.5 rounded">
+              Não obrigatório
+            </span>
+          </div>
           {sublabel && (
-            <p className="text-[11px] text-slate-400 font-medium">{sublabel}</p>
+            <p className="text-[11px] text-slate-400 font-medium mt-0.5">{sublabel}</p>
           )}
         </div>
 
-        {/* Current Avatar Miniature */}
-        {value && (
-          <div className="relative group shrink-0">
-            <img
-              src={value}
-              alt="Avatar preview"
-              className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm ring-2 ring-blue-500/20"
-            />
-          </div>
-        )}
+        {/* Current Avatar Miniature or Placeholder */}
+        <div className="flex items-center gap-2 shrink-0">
+          {value ? (
+            <div className="flex items-center gap-2">
+              <div className="relative group">
+                <img
+                  src={value}
+                  alt="Avatar preview"
+                  className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm ring-2 ring-blue-500/20"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                className="px-2 py-1 text-[11px] font-bold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-red-200 transition-colors flex items-center gap-1 cursor-pointer"
+                title="Deixar sem foto"
+              >
+                <UserX className="w-3.5 h-3.5" />
+                <span>Remover Foto</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-2.5 py-1 bg-white border border-dashed border-slate-300 rounded-lg">
+              <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                <User className="w-3.5 h-3.5" />
+              </div>
+              <span className="text-[11px] font-medium text-slate-500">Sem foto definida</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tabs navigation */}
@@ -132,7 +165,7 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
         <button
           type="button"
           onClick={() => setTab("upload")}
-          className={`flex-1 py-1.5 px-2.5 rounded-md flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-1.5 px-2.5 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             tab === "upload"
               ? "bg-white text-blue-700 shadow-xs font-bold"
               : "text-slate-600 hover:text-slate-900"
@@ -145,7 +178,7 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
         <button
           type="button"
           onClick={() => setTab("url")}
-          className={`flex-1 py-1.5 px-2.5 rounded-md flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-1.5 px-2.5 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             tab === "url"
               ? "bg-white text-blue-700 shadow-xs font-bold"
               : "text-slate-600 hover:text-slate-900"
@@ -159,7 +192,7 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
           <button
             type="button"
             onClick={() => setTab("presets")}
-            className={`flex-1 py-1.5 px-2.5 rounded-md flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 py-1.5 px-2.5 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               tab === "presets"
                 ? "bg-white text-blue-700 shadow-xs font-bold"
                 : "text-slate-600 hover:text-slate-900"
@@ -187,17 +220,17 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`w-full py-4 px-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
+            className={`w-full py-3.5 px-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
               isDragging
                 ? "border-blue-500 bg-blue-50/70 scale-[0.99]"
                 : "border-slate-300 hover:border-blue-400 bg-white hover:bg-slate-50/50"
             }`}
           >
-            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-2 shadow-xs">
+            <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-1.5 shadow-xs">
               {isProcessing ? (
-                <RefreshCw className="w-5 h-5 animate-spin" />
+                <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
-                <Camera className="w-5 h-5" />
+                <Camera className="w-4 h-4" />
               )}
             </div>
 
@@ -205,7 +238,7 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
               {isProcessing ? "Otimizando imagem..." : "Clique para escolher a foto ou arraste aqui"}
             </p>
             <p className="text-[10px] text-slate-400 mt-0.5">
-              PNG, JPG, WebP ou GIF (Salvo diretamente no perfil)
+              PNG, JPG ou WebP (Opcional - pode ser adicionada depois)
             </p>
           </div>
         </div>
@@ -233,7 +266,7 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
                   setUrlInput("");
                   onChange("");
                 }}
-                className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-slate-100 transition-colors"
+                className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
                 title="Limpar campo"
               >
                 <X className="w-4 h-4" />
@@ -241,7 +274,7 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
             )}
           </div>
           <p className="text-[10px] text-slate-400">
-            Cole qualquer link direto de imagem pública na web para o avatar.
+            Cole qualquer link direto de imagem pública na web para o avatar (opcional).
           </p>
         </div>
       )}
@@ -249,7 +282,21 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
       {/* Mode 3: Presets */}
       {tab === "presets" && presets.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Option to select "No Photo" */}
+            <button
+              type="button"
+              onClick={handleRemovePhoto}
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                !value
+                  ? "bg-blue-50 border-blue-500 text-blue-700 shadow-xs ring-1 ring-blue-500"
+                  : "border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+              }`}
+            >
+              <UserX className="w-4 h-4" />
+              <span>Sem foto</span>
+            </button>
+
             {presets.map((preset, index) => {
               const isSelected = value === preset;
               return (
@@ -257,7 +304,7 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({
                   key={preset + index}
                   type="button"
                   onClick={() => onChange(preset)}
-                  className={`relative w-12 h-12 rounded-full overflow-hidden border-2 transition-all cursor-pointer ${
+                  className={`relative w-11 h-11 rounded-full overflow-hidden border-2 transition-all cursor-pointer ${
                     isSelected
                       ? "border-blue-600 scale-105 ring-2 ring-blue-500/30"
                       : "border-slate-200 hover:border-slate-400"

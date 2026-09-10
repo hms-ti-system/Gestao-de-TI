@@ -129,11 +129,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => handleNavClick("profile")}
               className="flex items-center gap-3 p-2 bg-slate-800/40 hover:bg-slate-800 rounded-lg w-full text-left transition-all group"
             >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-8 h-8 rounded-full border border-slate-700 object-cover"
-              />
+              {currentUser.avatar ? (
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className="w-8 h-8 rounded-full border border-slate-700 object-cover shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-slate-700 border border-slate-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                  {currentUser.name ? currentUser.name.split(" ").filter(Boolean).map(n => n[0]).slice(0, 2).join("").toUpperCase() : "U"}
+                </div>
+              )}
               <div className="overflow-hidden flex-1">
                 <p className="text-xs font-semibold text-white truncate group-hover:text-blue-400 transition-colors">
                   {currentUser.name}
