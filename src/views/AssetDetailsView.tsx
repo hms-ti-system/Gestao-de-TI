@@ -506,22 +506,22 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">CPU</p>
-                  <p className="text-xs font-semibold text-slate-800 mt-1">{asset.cpu || "—"}</p>
+                  <p className="text-xs font-semibold text-slate-800 mt-1 break-words">{asset.cpu || "—"}</p>
                 </div>
                 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">RAM / Memória</p>
-                  <p className="text-xs font-semibold text-slate-800 mt-1">{asset.ram || "—"}</p>
+                  <p className="text-xs font-semibold text-slate-800 mt-1 break-words">{asset.ram || "—"}</p>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Armazenamento</p>
-                  <p className="text-xs font-semibold text-slate-800 mt-1">{asset.storage || "—"}</p>
+                  <p className="text-xs font-semibold text-slate-800 mt-1 break-words">{asset.storage || "—"}</p>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Sistema Operacional</p>
-                  <p className="text-xs font-semibold text-slate-800 mt-1">{asset.os || "—"}</p>
+                  <p className="text-xs font-semibold text-slate-800 mt-1 break-words">{asset.os || "—"}</p>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">

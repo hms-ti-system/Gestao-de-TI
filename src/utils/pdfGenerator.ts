@@ -142,13 +142,34 @@ export async function generateAssetPdf(asset: Asset): Promise<void> {
     fields: Array<{ label: string; value: string; isMono?: boolean; alert?: boolean }>
   ) => {
     const colWidth = (pageWidth - margin * 2) / fields.length;
-    fields.forEach((f, idx) => {
+    const valueWidth = colWidth - 4;
+
+    // Prepare lines for each column based on available column width
+    const preparedFields = fields.map((f) => {
+      doc.setFont(f.isMono ? "courier" : "helvetica", "bold");
+      doc.setFontSize(8.5);
+      const rawText = f.value || "—";
+      const lines = doc.splitTextToSize(rawText, valueWidth);
+      const normalizedLines = Array.isArray(lines) ? (lines as string[]) : [lines as string];
+      return {
+        ...f,
+        lines: normalizedLines,
+      };
+    });
+
+    const maxLines = Math.max(1, ...preparedFields.map((f) => f.lines.length));
+    const lineHeightMm = doc.getLineHeight() / doc.internal.scaleFactor;
+
+    preparedFields.forEach((f, idx) => {
       const colX = margin + idx * colWidth;
+
+      // Label
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
       doc.setTextColor(100, 116, 139);
       doc.text(f.label.toUpperCase(), colX + 2, y);
 
+      // Value with word wrap to prevent overlapping next columns
       doc.setFont(f.isMono ? "courier" : "helvetica", "bold");
       doc.setFontSize(8.5);
       if (f.alert) {
@@ -156,9 +177,11 @@ export async function generateAssetPdf(asset: Asset): Promise<void> {
       } else {
         doc.setTextColor(15, 23, 42); // slate-900
       }
-      doc.text(f.value || "—", colX + 2, y + 4.5);
+      doc.text(f.lines, colX + 2, y + 4.5);
     });
-    y += 9;
+
+    // Advance Y dynamically according to maxLines so rows never overlap vertically
+    y += 9 + (maxLines - 1) * lineHeightMm;
   };
 
   // Section 1: Dados Fiscais, Compra e Garantia

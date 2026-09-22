@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { 
   Laptop, 
@@ -135,18 +135,56 @@ export const Assets: React.FC<AssetsProps> = ({
     ...assets.map(a => a.manufacturer)
   ].filter(Boolean)));
 
-  const uniqueCategories = Array.from(new Set([
-    "Notebook",
-    "Desktop",
-    "Nobreak",
-    "Servidor",
-    "Monitor",
-    "Teclado",
-    "Mouse",
-    "Headset",
-    "Impressora",
-    ...assets.map(a => a.category)
-  ].filter(Boolean)));
+  // Dynamic categories: standard corporate IT categories + all registered categories from assets
+  const uniqueCategories = useMemo(() => {
+    const defaultCategories = [
+      "Notebook",
+      "Desktop",
+      "Nobreak",
+      "Servidor",
+      "Monitor",
+      "Impressora",
+      "Teclado",
+      "Mouse",
+      "Headset",
+      "Switch / Rede",
+    ];
+
+    const categoryMap = new Map<string, string>();
+    defaultCategories.forEach((c) => categoryMap.set(c.toLowerCase(), c));
+
+    assets.forEach((a) => {
+      const trimmed = a.category?.trim();
+      if (trimmed) {
+        if (!categoryMap.has(trimmed.toLowerCase())) {
+          categoryMap.set(trimmed.toLowerCase(), trimmed);
+        }
+      }
+    });
+
+    return Array.from(categoryMap.values()).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [assets]);
+
+  const categoryFilterList = useMemo(() => {
+    const activeCats: { name: string; count: number }[] = [];
+    const emptyCats: { name: string; count: number }[] = [];
+
+    uniqueCategories.forEach((cat) => {
+      const count = assets.filter(
+        (a) => a.category?.trim().toLowerCase() === cat.trim().toLowerCase()
+      ).length;
+      if (count > 0) {
+        activeCats.push({ name: cat, count });
+      } else {
+        emptyCats.push({ name: cat, count: 0 });
+      }
+    });
+
+    activeCats.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "pt-BR"));
+    emptyCats.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+    return { activeCats, emptyCats };
+  }, [uniqueCategories, assets]);
 
   const isComputerCategory = (cat: string) => {
     if (!cat) return false;
@@ -294,7 +332,10 @@ export const Assets: React.FC<AssetsProps> = ({
       (a.assignedToUser?.name || "").toLowerCase().includes(search.toLowerCase()) ||
       (a.seriesNumber || "").toLowerCase().includes(search.toLowerCase());
 
-    const matchCat = selectedCategory === "all" || a.category.toLowerCase().includes(selectedCategory.toLowerCase());
+    const matchCat = 
+      selectedCategory === "all" || 
+      a.category?.trim().toLowerCase() === selectedCategory.trim().toLowerCase() ||
+      a.category?.trim().toLowerCase().includes(selectedCategory.trim().toLowerCase());
     const matchStatus = selectedStatus === "all" || a.status === selectedStatus;
 
     return matchQuery && matchCat && matchStatus;
@@ -700,12 +741,23 @@ export const Assets: React.FC<AssetsProps> = ({
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="bg-white border border-slate-200 text-xs font-semibold px-3 py-1.5 rounded-lg text-slate-600 outline-none w-full sm:w-auto"
+              className="bg-white border border-slate-200 text-xs font-semibold px-3 py-1.5 rounded-lg text-slate-600 outline-none w-full sm:w-auto cursor-pointer hover:border-slate-300 transition-colors"
             >
-              <option value="all">Todas Categorias</option>
-              <option value="Notebook">Notebooks</option>
-              <option value="Servidor">Servidores</option>
-              <option value="Monitor">Monitores</option>
+              <option value="all">Todas Categorias ({totalAssets})</option>
+              {categoryFilterList.activeCats.map(({ name, count }) => (
+                <option key={name} value={name}>
+                  {name} ({count})
+                </option>
+              ))}
+              {categoryFilterList.emptyCats.length > 0 && (
+                <optgroup label="Outras Categorias">
+                  {categoryFilterList.emptyCats.map(({ name }) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
 
             {/* Status Select */}
@@ -742,8 +794,20 @@ export const Assets: React.FC<AssetsProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredAssets.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-400 text-xs">
-                    Nenhum ativo corresponde aos filtros selecionados.
+                  <td colSpan={6} className="text-center py-10 text-slate-400 text-xs">
+                    <p className="font-medium text-slate-600">Nenhum ativo corresponde aos filtros selecionados.</p>
+                    {(selectedCategory !== "all" || selectedStatus !== "all" || search) && (
+                      <button
+                        onClick={() => {
+                          setSelectedCategory("all");
+                          setSelectedStatus("all");
+                          setSearch("");
+                        }}
+                        className="mt-2.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-md text-[11px] cursor-pointer transition-colors inline-block"
+                      >
+                        Limpar todos os filtros
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
