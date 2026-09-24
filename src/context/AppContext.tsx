@@ -1031,7 +1031,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Add Asset
   const addAsset = (asset: Omit<Asset, "id" | "health"> & { id?: string }) => {
     const now = new Date();
-    const id = asset.id?.trim() || ("TAG-" + now.getFullYear() + "-" + Math.floor(Math.random() * 9000 + 1000));
+    const rawId = asset.id?.trim() || ("TAG-" + now.getFullYear() + "-" + Math.floor(Math.random() * 9000 + 1000));
+    // Sanitize document ID to prevent invalid Firestore path characters (e.g. forward slashes)
+    const id = rawId.replace(/\//g, "-");
     const nowIso = now.toISOString();
     const formattedDate = now.toLocaleDateString("pt-BR", { day: "numeric", month: "short", year: "numeric" });
     const formattedTime = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });

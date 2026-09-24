@@ -30,6 +30,7 @@ import { EditAssetModal } from "../components/EditAssetModal";
 import { QrScannerModal } from "../components/QrScannerModal";
 import { AssetTagModal } from "../components/AssetTagModal";
 import { PhysicalAssetPlaque } from "../components/PhysicalAssetPlaque";
+import { compressImageFile } from "../utils/imageUtils";
 
 // Helper for warranty expiration alerts (30, 15, 10, 5 days and expired)
 export const getWarrantyAlert = (warrantyDate?: string) => {
@@ -251,14 +252,19 @@ export const Assets: React.FC<AssetsProps> = ({
     ...assets.map(a => a.os).filter(Boolean) as string[]
   ]));
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, 900, 900, 0.82);
+        setNewImage(compressed);
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setNewImage(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -271,16 +277,21 @@ export const Assets: React.FC<AssetsProps> = ({
     setIsDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, 900, 900, 0.82);
+        setNewImage(compressed);
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setNewImage(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -348,14 +359,26 @@ export const Assets: React.FC<AssetsProps> = ({
 
   const handleCreateAsset = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanTag = (newTagId.trim() || ("TAG-" + new Date().getFullYear() + "-" + Math.floor(Math.random() * 9000 + 1000))).replace(/\//g, "-");
+    
+    // Check if tag already exists to prevent silent overwriting of existing asset
+    const existingAsset = assets.find((a) => a.id.trim().toUpperCase() === cleanTag.toUpperCase());
+    if (existingAsset) {
+      showToast(
+        "TAG Já Cadastrada",
+        `A TAG "${cleanTag}" já pertence ao ativo "${existingAsset.name}". Escolha outro número de plaqueta para não sobrescrever o ativo existente.`,
+        "warning"
+      );
+      return;
+    }
+
     const isComp = isComputerCategory(newCategory);
     const hasBattery = hasBatteryCategory(newCategory);
     const nowIso = new Date().toISOString();
     const regDate = nowIso.split("T")[0];
-    const generatedTag = newTagId.trim() || ("TAG-" + new Date().getFullYear() + "-" + Math.floor(Math.random() * 9000 + 1000));
 
     addAsset({
-      id: generatedTag,
+      id: cleanTag,
       name: newName.trim(),
       seriesNumber: newSerial.trim(),
       cmId: newCmId.trim() || undefined,
@@ -1174,17 +1197,31 @@ export const Assets: React.FC<AssetsProps> = ({
                         setTagScannedSuccess(false);
                       }}
                       className={`w-full px-3.5 py-2 rounded-xl text-slate-900 font-mono text-sm font-bold outline-none transition-all ${
-                        tagScannedSuccess 
+                        assets.some(a => a.id.trim().toUpperCase() === newTagId.trim().toUpperCase())
+                          ? "bg-red-50 border-2 border-red-500 focus:border-red-600 text-red-950"
+                          : tagScannedSuccess 
                           ? "bg-emerald-50/80 border-2 border-emerald-400 focus:border-emerald-600 text-emerald-950" 
                           : "bg-white border border-blue-200 focus:border-blue-600"
                       }`}
                     />
                     {newTagId && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-slate-400 uppercase">
-                        TAG Válida
-                      </span>
+                      assets.some(a => a.id.trim().toUpperCase() === newTagId.trim().toUpperCase()) ? (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-red-600 uppercase flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-red-500" /> TAG em uso
+                        </span>
+                      ) : (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold text-emerald-600 uppercase">
+                          TAG Disponível
+                        </span>
+                      )
                     )}
                   </div>
+                  {newTagId && assets.some(a => a.id.trim().toUpperCase() === newTagId.trim().toUpperCase()) && (
+                    <p className="text-[11px] text-red-600 font-semibold flex items-center gap-1 pt-1">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      Esta TAG já está em uso pelo ativo "{assets.find(a => a.id.trim().toUpperCase() === newTagId.trim().toUpperCase())?.name}". Digite uma TAG diferente para não sobrescrevê-lo.
+                    </p>
+                  )}
                 </div>
 
                 {/* Mini Preview da Plaqueta se tiver número */}
