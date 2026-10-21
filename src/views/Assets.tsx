@@ -60,6 +60,32 @@ export const getWarrantyAlert = (warrantyDate?: string) => {
   return null;
 };
 
+// Helper to retrieve deployment location (from asset.location, timeline history, or assigned user location)
+export const getAssetDeploymentLocation = (asset: Asset): string => {
+  if (asset.location && asset.location.trim()) {
+    return asset.location.trim();
+  }
+  // Try to find in history timeline
+  if (asset.history && asset.history.length > 0) {
+    for (const event of asset.history) {
+      if (event.description) {
+        const match = event.description.match(/(?:local|destino)[:\s]+([^.\n,]+)/i);
+        if (match && match[1] && match[1].trim()) {
+          return match[1].trim();
+        }
+      }
+    }
+  }
+  // Fallback to assigned user's location
+  if (asset.assignedToUser?.location) {
+    return asset.assignedToUser.location;
+  }
+  if (asset.status === "Disponível") {
+    return "Estoque Central";
+  }
+  return "—";
+};
+
 interface AssetsProps {
   setCurrentView: (view: string) => void;
   setSelectedAssetId: (id: string) => void;
@@ -336,12 +362,14 @@ export const Assets: React.FC<AssetsProps> = ({
 
   // Filter Assets
   const filteredAssets = assets.filter(a => {
+    const loc = getAssetDeploymentLocation(a);
     const matchQuery = 
       a.name.toLowerCase().includes(search.toLowerCase()) ||
       a.id.toLowerCase().includes(search.toLowerCase()) ||
       (a.cmId || "").toLowerCase().includes(search.toLowerCase()) ||
       (a.assignedToUser?.name || "").toLowerCase().includes(search.toLowerCase()) ||
-      (a.seriesNumber || "").toLowerCase().includes(search.toLowerCase());
+      (a.seriesNumber || "").toLowerCase().includes(search.toLowerCase()) ||
+      (loc && loc !== "—" && loc.toLowerCase().includes(search.toLowerCase()));
 
     const matchCat = 
       selectedCategory === "all" || 
@@ -476,6 +504,7 @@ export const Assets: React.FC<AssetsProps> = ({
         "Categoria",
         "Status",
         "Atribuído a",
+        "Local de Implantação",
         "E-mail do Atribuído",
         "Data Troca Bateria",
         "Próxima Troca Bateria",
@@ -516,6 +545,7 @@ export const Assets: React.FC<AssetsProps> = ({
             asset.category,
             asset.status,
             asset.assignedToUser ? asset.assignedToUser.name : "Estoque",
+            getAssetDeploymentLocation(asset),
             asset.assignedToUser ? asset.assignedToUser.email : "",
             asset.batteryLastReplaced || "",
             asset.batteryNextReplacement || "",
@@ -811,13 +841,14 @@ export const Assets: React.FC<AssetsProps> = ({
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Categoria</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Atribuído a</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Local de Implantação</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredAssets.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-10 text-slate-400 text-xs">
+                  <td colSpan={7} className="text-center py-10 text-slate-400 text-xs">
                     <p className="font-medium text-slate-600">Nenhum ativo corresponde aos filtros selecionados.</p>
                     {(selectedCategory !== "all" || selectedStatus !== "all" || search) && (
                       <button
@@ -948,6 +979,33 @@ export const Assets: React.FC<AssetsProps> = ({
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
+                    </td>
+                    <td 
+                      onClick={() => handleAssetClick(asset.id)}
+                      className="px-6 py-4"
+                    >
+                      {(() => {
+                        const loc = getAssetDeploymentLocation(asset);
+                        if (!loc || loc === "—") {
+                          return <span className="text-xs text-slate-400">—</span>;
+                        }
+                        const isStock = asset.status === "Disponível" || loc.toLowerCase().includes("estoque");
+                        return (
+                          <div className="flex items-center gap-1.5 min-w-[130px]">
+                            {isStock ? (
+                              <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            ) : (
+                              <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                            )}
+                            <span 
+                              className={`text-xs font-semibold truncate ${isStock ? "text-slate-600" : "text-slate-800"}`}
+                              title={loc}
+                            >
+                              {loc}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>

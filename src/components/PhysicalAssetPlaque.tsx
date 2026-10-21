@@ -42,8 +42,9 @@ export function buildAssetQrPayload(
   if (asset?.assignedToUser?.department) {
     lines.push(`SETOR: ${asset.assignedToUser.department}`);
   }
-  if (asset?.assignedToUser?.location) {
-    lines.push(`LOCAL: ${asset.assignedToUser.location}`);
+  const assetLocation = asset?.location || asset?.assignedToUser?.location;
+  if (assetLocation) {
+    lines.push(`LOCAL: ${assetLocation}`);
   }
 
   const specs = [asset?.cpu, asset?.ram, asset?.storage].filter(Boolean).join(" | ");

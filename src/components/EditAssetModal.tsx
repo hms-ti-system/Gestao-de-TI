@@ -66,6 +66,7 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
   const [invoiceNumber, setInvoiceNumber] = useState(asset.invoiceNumber || "");
   const [purchaseDate, setPurchaseDate] = useState(asset.purchaseDate || "");
   const [warrantyDate, setWarrantyDate] = useState(asset.warrantyDate || "");
+  const [location, setLocation] = useState(asset.location || "");
   const [image, setImage] = useState(asset.image || "");
   const [description, setDescription] = useState(asset.description || "");
 
@@ -85,6 +86,7 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
       setCmId(asset.cmId || "");
       setStatus(asset.status || "Disponível");
       setAssignedToUserId(asset.assignedToUserId || "");
+      setLocation(asset.location || "");
       setCpu(asset.cpu || "");
       setRam(asset.ram || "");
       setStorage(asset.storage || "");
@@ -141,6 +143,18 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
     "Ubuntu 22.04 LTS",
     "Red Hat Enterprise Linux",
     ...assets.map(a => a.os || "")
+  ].filter(Boolean)));
+
+  const uniqueLocations = Array.from(new Set([
+    "Pátio 1",
+    "Pátio 2",
+    "Sede Principal (HQ)",
+    "Remoto - Home Office",
+    "Escritório Regional SP",
+    "Laboratório TI",
+    "Estoque Central",
+    ...users.map(u => u.location),
+    ...assets.map(a => a.location || "")
   ].filter(Boolean)));
 
   const isComputerCategory = (cat: string) => {
@@ -261,6 +275,7 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
       status: finalStatus,
       assignedToUserId: status === "Atribuído" ? (assignedUserObj?.id || null) : null,
       assignedToUser: status === "Atribuído" ? assignedUserObj : null,
+      location: location.trim() || undefined,
       image: image || undefined,
       description: description.trim() || undefined,
       cpu: isComputerCategory(category) ? cpu.trim() || undefined : undefined,
@@ -479,6 +494,23 @@ export const EditAssetModal: React.FC<EditAssetModalProps> = ({
                       : "O ativo está isolado em bancada técnica / manutenção."}
                   </div>
                 )}
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="font-bold text-slate-500 uppercase tracking-wide">Local de Implantação</label>
+                  <input
+                    type="text"
+                    list="edit-locations-list"
+                    placeholder="ex: Sede Principal (HQ), Sala 204, Pátio 1..."
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 font-semibold outline-none focus:border-blue-600"
+                  />
+                  <datalist id="edit-locations-list">
+                    {uniqueLocations.map((loc) => (
+                      <option key={loc} value={loc} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
             </div>
 

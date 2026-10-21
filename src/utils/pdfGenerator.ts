@@ -264,12 +264,12 @@ export async function generateAssetPdf(asset: Asset): Promise<void> {
     ]);
     drawFieldRow([
       { label: "E-mail Corporativo", value: asset.assignedToUser.email },
-      { label: "Local de Trabalho / Filial", value: asset.assignedToUser.location },
+      { label: "Local de Implantação", value: asset.location || asset.assignedToUser.location || "—" },
       { label: "Status de Posse", value: "Em Uso Ativo pelo Colaborador" },
     ]);
   } else {
     drawFieldRow([
-      { label: "Alocação", value: "Equipamento disponível no Estoque Central de TI" },
+      { label: "Alocação", value: `Equipamento no ${asset.location || "Estoque Central de TI"}` },
       { label: "Responsabilidade", value: "Departamento de Infraestrutura & Suporte" },
     ]);
   }

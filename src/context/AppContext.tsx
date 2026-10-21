@@ -713,11 +713,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             type: "success",
             user: currentUser?.name || "Admin",
           };
+          const cleanLocation = location?.trim();
+          const targetLocation = cleanLocation || userObj?.location || a.location || "";
           const updatedAsset = {
             ...a,
             status: "Atribuído" as const,
             assignedToUserId: userId,
             assignedToUser: userObj,
+            location: targetLocation,
             history: [newEvent, ...(a.history || [])],
           };
           persistSave("assets", updatedAsset);
@@ -768,11 +771,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             user: currentUser?.name || "Admin",
           };
 
+          const returnLocation = location === "hq" 
+            ? "Estoque Central" 
+            : location === "it_lab" 
+            ? "Laboratório TI" 
+            : (location?.trim() || "Estoque Central");
+
           const updatedAsset = {
             ...a,
             status,
             assignedToUserId: null,
             assignedToUser: null,
+            location: status === "Disponível" ? returnLocation : a.location || returnLocation,
             health: condition === "good" ? 95 : condition === "damaged" ? 40 : 65,
             history: [newEvent, ...(a.history || [])],
           };

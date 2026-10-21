@@ -30,7 +30,8 @@ import {
   QrCode,
   FileDown,
   ShieldAlert,
-  Trash2
+  Trash2,
+  MapPin
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Asset, User as UserType } from "../types";
@@ -797,13 +798,22 @@ export const AssetDetailsView: React.FC<AssetDetailsViewProps> = ({
 
                 <div className="text-xs space-y-2 border-t border-slate-100 pt-3 text-slate-600">
                   <p><strong>Departamento:</strong> {asset.assignedToUser.department}</p>
-                  <p><strong>Filial/Local:</strong> {asset.assignedToUser.location}</p>
+                  <p className="flex items-center gap-1.5">
+                    <strong>Local de Implantação:</strong>
+                    <span className="inline-flex items-center gap-1 font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      <MapPin className="w-3 h-3 text-blue-600" />
+                      {asset.location || asset.assignedToUser.location || "—"}
+                    </span>
+                  </p>
                 </div>
               </div>
             ) : (
               <div className="text-center py-5 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-slate-500 text-xs">
                 <p className="font-semibold text-slate-700">Disponível no Estoque</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Equipamento pronto para alocação.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5 flex items-center justify-center gap-1">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Local: <strong>{asset.location || "Estoque Central"}</strong></span>
+                </p>
               </div>
             )}
           </div>

@@ -45,6 +45,7 @@ export interface Asset {
   cmId?: string;
   batteryLastReplaced?: string;
   batteryNextReplacement?: string;
+  location?: string; // Local de implantação / Local atual
   linkedAssets?: string[];
   history?: TimelineEvent[];
 }
