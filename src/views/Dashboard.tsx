@@ -16,11 +16,13 @@ import {
   ShieldAlert,
   Clock,
   ChevronRight,
-  Trash2
+  Trash2,
+  MapPin
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Activity } from "../types";
 import { QrScannerModal } from "../components/QrScannerModal";
+import { getAssetDeploymentLocation } from "./Assets";
 import {
   ResponsiveContainer,
   PieChart,
@@ -184,23 +186,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
     ];
   }, [inUseAssets, availableAssets, maintenanceAssets]);
 
-  // Memoized department data for Recharts BarChart
-  const departmentChartData = useMemo(() => {
-    const deptMap: Record<string, number> = {};
+  // Memoized deployment location data for Recharts BarChart
+  const locationChartData = useMemo(() => {
+    const locMap: Record<string, number> = {};
     assets.forEach((asset) => {
-      let dept = "Estoque (Não Alocado)";
-      if (asset.assignedToUser?.department) {
-        dept = asset.assignedToUser.department;
-      } else if (asset.assignedToUserId) {
-        const matchedUser = users.find((u) => u.id === asset.assignedToUserId);
-        if (matchedUser?.department) {
-          dept = matchedUser.department;
+      let loc = getAssetDeploymentLocation(asset);
+      if (!loc || loc === "—") {
+        if (asset.assignedToUser?.location && asset.assignedToUser.location.trim()) {
+          loc = asset.assignedToUser.location.trim();
+        } else if (asset.assignedToUserId) {
+          const matchedUser = users.find((u) => u.id === asset.assignedToUserId);
+          if (matchedUser?.location && matchedUser.location.trim()) {
+            loc = matchedUser.location.trim();
+          }
         }
       }
-      deptMap[dept] = (deptMap[dept] || 0) + 1;
+      if (!loc || loc === "—") {
+        loc = asset.status === "Disponível" ? "Estoque Central" : "Estoque";
+      }
+      locMap[loc] = (locMap[loc] || 0) + 1;
     });
 
-    return Object.entries(deptMap).map(([name, value]) => ({
+    return Object.entries(locMap).map(([name, value]) => ({
       name,
       quantidade: value,
     })).sort((a, b) => b.quantidade - a.quantidade);
@@ -371,7 +378,158 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* Expiration Alerts Panel */}
+      {/* Main Bento Grid: Charts & Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Status Distribution Visualizer with Recharts */}
+        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-6 flex flex-col h-[400px] shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                <PieIcon className="w-4 h-4" />
+              </div>
+              <h3 className="font-sans text-base font-bold text-slate-800">Distribuição de Status</h3>
+            </div>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          </div>
+
+          <p className="text-xs text-slate-400 mb-2">Visão geral do estado operacional de todos os patrimônios cadastrados.</p>
+
+          <div className="flex-1 relative flex items-center justify-center min-h-[220px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={statusChartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={70}
+                  outerRadius={95}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {statusChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} className="outline-none" />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1e293b",
+                    borderRadius: "8px",
+                    border: "none",
+                    color: "#fff",
+                    fontSize: "12px",
+                    fontFamily: "monospace"
+                  }}
+                  itemStyle={{ color: "#fff" }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+
+            {/* Absolute Center Counter */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+              <span className="block font-mono text-3xl font-black text-slate-800 leading-none">{totalAssets}</span>
+              <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block mt-1">Ativos Totais</span>
+            </div>
+          </div>
+
+          {/* Styled Legend Grid */}
+          <div className="grid grid-cols-3 gap-2 mt-4 text-[11px] border-t border-slate-50 pt-3">
+            <div className="flex flex-col items-center p-1.5 bg-blue-50/50 rounded-lg">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#3B82F6]" />
+                <span className="text-slate-500 font-bold">Alocados</span>
+              </div>
+              <span className="font-mono text-slate-800 font-bold mt-0.5">{inUseAssets}</span>
+            </div>
+            <div className="flex flex-col items-center p-1.5 bg-emerald-50/50 rounded-lg">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+                <span className="text-slate-500 font-bold">Disponíveis</span>
+              </div>
+              <span className="font-mono text-slate-800 font-bold mt-0.5">{availableAssets}</span>
+            </div>
+            <div className="flex flex-col items-center p-1.5 bg-amber-50/50 rounded-lg">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#F59E0B]" />
+                <span className="text-slate-500 font-bold">Manutenção</span>
+              </div>
+              <span className="font-mono text-slate-800 font-bold mt-0.5">{maintenanceAssets}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Deployment Location Distribution (Interactive Bar Chart with Recharts) */}
+        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-6 flex flex-col h-[400px] shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <h3 className="font-sans text-base font-bold text-slate-800">Distribuição por Local de Implantação</h3>
+            </div>
+            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">Métrica em Tempo Real</span>
+          </div>
+
+          <p className="text-xs text-slate-400 mb-6">Volume total de equipamentos por local de implantação / estoque da organização.</p>
+
+          <div className="flex-1 w-full min-h-[220px]">
+            {locationChartData.length === 0 ? (
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs">
+                Nenhum local de implantação com ativo registrado no momento.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={locationChartData} margin={{ top: 10, right: 10, left: -25, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="name" 
+                    stroke="#64748b" 
+                    fontSize={10} 
+                    fontWeight={500}
+                    tickLine={false} 
+                    axisLine={false}
+                    tickFormatter={(value) => value.length > 15 ? `${value.slice(0, 15)}...` : value}
+                  />
+                  <YAxis 
+                    stroke="#64748b" 
+                    fontSize={10} 
+                    fontWeight={500}
+                    tickLine={false} 
+                    axisLine={false}
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    contentStyle={{
+                      backgroundColor: "#1e293b",
+                      borderRadius: "8px",
+                      border: "none",
+                      color: "#fff",
+                      fontSize: "12px",
+                    }}
+                    labelStyle={{ color: "#94a3b8", fontWeight: "bold" }}
+                    itemStyle={{ color: "#fff" }}
+                  />
+                  <Bar 
+                    dataKey="quantidade" 
+                    fill="#6366f1" 
+                    radius={[6, 6, 0, 0]} 
+                    maxBarSize={45}
+                  >
+                    {locationChartData.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={index % 2 === 0 ? "#4f46e5" : "#6366f1"} 
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Expiration Alerts Panel - Placed above Recent Activities */}
       <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
@@ -505,157 +663,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Bento Grid: Charts & Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Status Distribution Visualizer with Recharts */}
-        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-6 flex flex-col h-[400px] shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
-                <PieIcon className="w-4 h-4" />
-              </div>
-              <h3 className="font-sans text-base font-bold text-slate-800">Distribuição de Status</h3>
-            </div>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          </div>
-
-          <p className="text-xs text-slate-400 mb-2">Visão geral do estado operacional de todos os patrimônios cadastrados.</p>
-
-          <div className="flex-1 relative flex items-center justify-center min-h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={statusChartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={70}
-                  outerRadius={95}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {statusChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} className="outline-none" />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#1e293b",
-                    borderRadius: "8px",
-                    border: "none",
-                    color: "#fff",
-                    fontSize: "12px",
-                    fontFamily: "monospace"
-                  }}
-                  itemStyle={{ color: "#fff" }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-
-            {/* Absolute Center Counter */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-              <span className="block font-mono text-3xl font-black text-slate-800 leading-none">{totalAssets}</span>
-              <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block mt-1">Ativos Totais</span>
-            </div>
-          </div>
-
-          {/* Styled Legend Grid */}
-          <div className="grid grid-cols-3 gap-2 mt-4 text-[11px] border-t border-slate-50 pt-3">
-            <div className="flex flex-col items-center p-1.5 bg-blue-50/50 rounded-lg">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#3B82F6]" />
-                <span className="text-slate-500 font-bold">Alocados</span>
-              </div>
-              <span className="font-mono text-slate-800 font-bold mt-0.5">{inUseAssets}</span>
-            </div>
-            <div className="flex flex-col items-center p-1.5 bg-emerald-50/50 rounded-lg">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#10B981]" />
-                <span className="text-slate-500 font-bold">Disponíveis</span>
-              </div>
-              <span className="font-mono text-slate-800 font-bold mt-0.5">{availableAssets}</span>
-            </div>
-            <div className="flex flex-col items-center p-1.5 bg-amber-50/50 rounded-lg">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#F59E0B]" />
-                <span className="text-slate-500 font-bold">Manutenção</span>
-              </div>
-              <span className="font-mono text-slate-800 font-bold mt-0.5">{maintenanceAssets}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Department Distribution (Interactive Bar Chart with Recharts) */}
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-6 flex flex-col h-[400px] shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
-                <BarChart2 className="w-4 h-4" />
-              </div>
-              <h3 className="font-sans text-base font-bold text-slate-800">Distribuição por Departamento</h3>
-            </div>
-            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">Métrica em Tempo Real</span>
-          </div>
-
-          <p className="text-xs text-slate-400 mb-6">Volume total de equipamentos atribuídos a cada setor da organização.</p>
-
-          <div className="flex-1 w-full min-h-[220px]">
-            {departmentChartData.length === 0 ? (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-                Nenhum departamento com ativo alocado no momento.
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={departmentChartData} margin={{ top: 10, right: 10, left: -25, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis 
-                    dataKey="name" 
-                    stroke="#64748b" 
-                    fontSize={10} 
-                    fontWeight={500}
-                    tickLine={false} 
-                    axisLine={false}
-                    tickFormatter={(value) => value.length > 15 ? `${value.slice(0, 15)}...` : value}
-                  />
-                  <YAxis 
-                    stroke="#64748b" 
-                    fontSize={10} 
-                    fontWeight={500}
-                    tickLine={false} 
-                    axisLine={false}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: '#f8fafc' }}
-                    contentStyle={{
-                      backgroundColor: "#1e293b",
-                      borderRadius: "8px",
-                      border: "none",
-                      color: "#fff",
-                      fontSize: "12px",
-                    }}
-                    labelStyle={{ color: "#94a3b8", fontWeight: "bold" }}
-                    itemStyle={{ color: "#fff" }}
-                  />
-                  <Bar 
-                    dataKey="quantidade" 
-                    fill="#6366f1" 
-                    radius={[6, 6, 0, 0]} 
-                    maxBarSize={45}
-                  >
-                    {departmentChartData.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={index % 2 === 0 ? "#4f46e5" : "#6366f1"} 
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
             )}
           </div>
         </div>
